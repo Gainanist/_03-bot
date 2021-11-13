@@ -48,17 +48,38 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
+const BATTLE_START: &str = "
+УНИЧ... ТОЖИТЬ.
+
+ХП: 6/6
+
+Сенсор: 30%
+Ядро: 20%
+Левое крыло: 70%
+Правое крыло: 70%
+Орудие: 50%
+
+Его шанс попасть: 100%
+";
+
 async fn handle_event(
     shard_id: u64,
     event: Event,
     http: Arc<HttpClient>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     match event {
-        Event::MessageCreate(msg) if msg.content == "!ping" => {
-            http.create_message(msg.channel_id)
-                .content("Pong!")?
-                .exec()
-                .await?;
+        Event::MessageCreate(msg) => {
+            if msg.content == "!ping" {
+                http.create_message(msg.channel_id)
+                    .content("Pong!")?
+                    .exec()
+                    .await?;
+            } else if msg.content == "!бой" {
+                http.create_message(msg.channel_id)
+                    .content(BATTLE_START)?
+                    .exec()
+                    .await?;
+            }
         }
         Event::ShardConnected(_) => {
             println!("Connected on shard {}", shard_id);
