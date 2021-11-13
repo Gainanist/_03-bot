@@ -1,0 +1,14 @@
+[package]
+name = "test_discord_bot"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = "0.3.17"
+tokio = { version = "1.13.0", features = ["full"] }
+twilight-cache-inmemory = "0.7.1"
+twilight-gateway = "0.7.1"
+twilight-http = "0.7.1"
+twilight-model = "0.7.1"
