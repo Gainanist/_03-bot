@@ -1,9 +1,13 @@
-use std::{env, error::Error, sync::Arc};
+mod state;
+
+use std::{borrow::BorrowMut, env, error::Error, sync::Arc};
 use futures::stream::StreamExt;
+use rand::{Rng, prelude::ThreadRng};
+use state::Battle;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::gateway::Intents;
+use twilight_model::{gateway::{Intents, payload::incoming::MessageCreate}, id::ChannelId};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -37,56 +41,149 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .resource_types(ResourceType::MESSAGE)
         .build();
 
+    let mut event_handler = EventHandler::new();
+    let mut rng = rand::thread_rng();
+
     // Process each event as they come in.
     while let Some((shard_id, event)) = events.next().await {
         // Update the cache with the event.
         cache.update(&event);
 
-        tokio::spawn(handle_event(shard_id, event, Arc::clone(&http)));
+        event_handler.handle(
+            shard_id,
+            event,
+            Arc::clone(&http),
+            rng.gen_range(0..100),
+            rng.gen_range(0..100),
+        ).await?;
     }
 
     Ok(())
 }
 
-const BATTLE_START: &str = "
-УНИЧ... ТОЖИТЬ.
+struct EventHandler {
+    battle: Battle,
+}
 
-ХП: 6/6
+impl EventHandler {
+    pub fn new() -> Self {
+        EventHandler {
+            battle: Battle::new()
+        }
+    }
+    pub async fn handle(
+        &mut self,
+        shard_id: u64,
+        event: Event,
+        http: Arc<HttpClient>,
+        hero_hit_roll: isize,
+        bygone_hit_roll: isize,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match event {
+            Event::MessageCreate(msg) => {
+                if let Some(app_id) = msg.application_id {
+                    if app_id.0.to_string() == env::var("APP_ID")? {
+                        ()
+                    }
+                }
+                
+                let bygone_hit_roll = bygone_hit_roll + self.battle.bygone.accuracy_penalty();
+                if msg.content.contains("_03") && self.battle.finished() {
+                    self.battle = Battle::start();
+                    self.render_battle(msg.channel_id, http).await?;
+                } else if msg.content.contains("сенсор") && !self.battle.finished() {
+                    self.battle.bygone.damage_sensor(
+                        self.battle.hero.shoot(),
+                        hero_hit_roll,
+                    );
+                    if self.battle.bygone.alive() {
+                        self.battle.hero.damage(
+                            self.battle.bygone.shoot(),
+                            bygone_hit_roll,
 
-Сенсор: 30%
-Ядро: 20%
-Левое крыло: 70%
-Правое крыло: 70%
-Орудие: 50%
+                        );
+                    }
+                    self.render_battle(msg.channel_id, http).await?;
+                } else if msg.content.contains("ядро") && !self.battle.finished() {
+                    self.battle.bygone.damage_core(
+                        self.battle.hero.shoot(),
+                        hero_hit_roll,
+                    );
+                    if self.battle.bygone.alive() {
+                        self.battle.hero.damage(
+                            self.battle.bygone.shoot(),
+                            bygone_hit_roll,
 
-Его шанс попасть: 100%
-";
+                        );
+                    }
+                    self.render_battle(msg.channel_id, http).await?;
+                } else if msg.content.contains("левое крыло") && !self.battle.finished() {
+                    self.battle.bygone.damage_left_wing(
+                        self.battle.hero.shoot(),
+                        hero_hit_roll,
+                    );
+                    if self.battle.bygone.alive() {
+                        self.battle.hero.damage(
+                            self.battle.bygone.shoot(),
+                            bygone_hit_roll,
 
-async fn handle_event(
-    shard_id: u64,
-    event: Event,
-    http: Arc<HttpClient>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match event {
-        Event::MessageCreate(msg) => {
-            if msg.content == "!ping" {
-                http.create_message(msg.channel_id)
-                    .content("Pong!")?
-                    .exec()
-                    .await?;
-            } else if msg.content == "!бой" {
-                http.create_message(msg.channel_id)
-                    .content(BATTLE_START)?
-                    .exec()
-                    .await?;
+                        );
+                    }
+                    self.render_battle(msg.channel_id, http).await?;
+                } else if msg.content.contains("правое крыло") && !self.battle.finished() {
+                    self.battle.bygone.damage_right_wing(
+                        self.battle.hero.shoot(),
+                        hero_hit_roll,
+                    );
+                    if self.battle.bygone.alive() {
+                        self.battle.hero.damage(
+                            self.battle.bygone.shoot(),
+                            bygone_hit_roll,
+
+                        );
+                    }
+                    self.render_battle(msg.channel_id, http).await?;
+                } else if msg.content.contains("орудие") && !self.battle.finished() {
+                    self.battle.bygone.damage_gun(
+                        self.battle.hero.shoot(),
+                        hero_hit_roll,
+                    );
+                    if self.battle.bygone.alive() {
+                        self.battle.hero.damage(
+                            self.battle.bygone.shoot(),
+                            bygone_hit_roll,
+
+                        );
+                    }
+                    self.render_battle(msg.channel_id, http).await?;
+                }
             }
+            Event::ShardConnected(_) => {
+                println!("Connected on shard {}", shard_id);
+            }
+            // Other events here...
+            _ => {}
         }
-        Event::ShardConnected(_) => {
-            println!("Connected on shard {}", shard_id);
-        }
-        // Other events here...
-        _ => {}
+
+        Ok(())
     }
 
-    Ok(())
+    async fn render_battle(&self, channel_id: ChannelId, http: Arc<HttpClient>) -> Result<(), Box<dyn Error + Send + Sync>> {
+        http.create_message(channel_id)
+            .content(&format!("{}", self.battle))?
+            .exec()
+            .await?;
+        Ok(())
+    }
+
+    // async fn tick<F: FnMut(isize, isize) -> () + ?Sized>(&mut self, damage_bygone: &mut F) {
+    //     let (damage, hit_chance_roll) = self.battle.hero.shoot(&mut self.rng);
+    //     damage_bygone(damage, hit_chance_roll);
+    //     if self.battle.bygone.alive() {
+    //         let (damage, hit_chance_roll) = self.battle.bygone.shoot(&mut self.rng);
+    //         self.battle.hero.damage(
+    //             damage, hit_chance_roll
+    //         );
+    //     }
+    // }
 }
