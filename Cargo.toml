@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 futures = "0.3.17"
+itertools = "0.10.0"
 rand = "0.8.4"
 tokio = { version = "1.13.0", features = ["full"] }
 twilight-cache-inmemory = "0.7.1"

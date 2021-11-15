@@ -1,9 +1,18 @@
-mod state;
+mod entities;
+mod game;
+mod bygone_03;
+mod localization;
+mod command_parser;
+mod language;
+mod command;
+mod player_action;
 
-use std::{borrow::BorrowMut, env, error::Error, sync::Arc};
+use std::{borrow::BorrowMut, env, error::Error, slice::SliceIndex, sync::Arc};
+use command_parser::parse_command;
 use futures::stream::StreamExt;
-use rand::{Rng, prelude::ThreadRng};
-use state::Battle;
+use game::Game;
+use language::Language;
+use localization::{Localizations, Localize};
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
@@ -42,8 +51,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .build();
 
     let mut event_handler = EventHandler::new();
-    let mut rng = rand::thread_rng();
-
     // Process each event as they come in.
     while let Some((shard_id, event)) = events.next().await {
         // Update the cache with the event.
@@ -53,8 +60,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             shard_id,
             event,
             Arc::clone(&http),
-            rng.gen_range(0..100),
-            rng.gen_range(0..100),
         ).await?;
     }
 
@@ -62,22 +67,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 struct EventHandler {
-    battle: Battle,
+    localizations: Localizations,
 }
 
 impl EventHandler {
     pub fn new() -> Self {
         EventHandler {
-            battle: Battle::new()
+            localizations: Localizations::new(),
         }
     }
+
     pub async fn handle(
         &mut self,
         shard_id: u64,
         event: Event,
         http: Arc<HttpClient>,
-        hero_hit_roll: isize,
-        bygone_hit_roll: isize,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         match event {
             Event::MessageCreate(msg) => {
@@ -87,75 +91,10 @@ impl EventHandler {
                     }
                 }
                 
-                let bygone_hit_roll = bygone_hit_roll + self.battle.bygone.accuracy_penalty();
-                if msg.content.contains("_03") && self.battle.finished() {
-                    self.battle = Battle::start();
-                    self.render_battle(msg.channel_id, http).await?;
-                } else if msg.content.contains("сенсор") && !self.battle.finished() {
-                    self.battle.bygone.damage_sensor(
-                        self.battle.hero.shoot(),
-                        hero_hit_roll,
-                    );
-                    if self.battle.bygone.alive() {
-                        self.battle.hero.damage(
-                            self.battle.bygone.shoot(),
-                            bygone_hit_roll,
-
-                        );
-                    }
-                    self.render_battle(msg.channel_id, http).await?;
-                } else if msg.content.contains("ядро") && !self.battle.finished() {
-                    self.battle.bygone.damage_core(
-                        self.battle.hero.shoot(),
-                        hero_hit_roll,
-                    );
-                    if self.battle.bygone.alive() {
-                        self.battle.hero.damage(
-                            self.battle.bygone.shoot(),
-                            bygone_hit_roll,
-
-                        );
-                    }
-                    self.render_battle(msg.channel_id, http).await?;
-                } else if msg.content.contains("левое крыло") && !self.battle.finished() {
-                    self.battle.bygone.damage_left_wing(
-                        self.battle.hero.shoot(),
-                        hero_hit_roll,
-                    );
-                    if self.battle.bygone.alive() {
-                        self.battle.hero.damage(
-                            self.battle.bygone.shoot(),
-                            bygone_hit_roll,
-
-                        );
-                    }
-                    self.render_battle(msg.channel_id, http).await?;
-                } else if msg.content.contains("правое крыло") && !self.battle.finished() {
-                    self.battle.bygone.damage_right_wing(
-                        self.battle.hero.shoot(),
-                        hero_hit_roll,
-                    );
-                    if self.battle.bygone.alive() {
-                        self.battle.hero.damage(
-                            self.battle.bygone.shoot(),
-                            bygone_hit_roll,
-
-                        );
-                    }
-                    self.render_battle(msg.channel_id, http).await?;
-                } else if msg.content.contains("орудие") && !self.battle.finished() {
-                    self.battle.bygone.damage_gun(
-                        self.battle.hero.shoot(),
-                        hero_hit_roll,
-                    );
-                    if self.battle.bygone.alive() {
-                        self.battle.hero.damage(
-                            self.battle.bygone.shoot(),
-                            bygone_hit_roll,
-
-                        );
-                    }
-                    self.render_battle(msg.channel_id, http).await?;
+                if let Some((command, language)) = parse_command(&msg.content) {
+                    let game = Game::new();
+                    let localization = self.localizations.get(language);
+                    self.send_message(&game.localize(localization), msg.channel_id, http).await?;
                 }
             }
             Event::ShardConnected(_) => {
@@ -168,22 +107,13 @@ impl EventHandler {
         Ok(())
     }
 
-    async fn render_battle(&self, channel_id: ChannelId, http: Arc<HttpClient>) -> Result<(), Box<dyn Error + Send + Sync>> {
+    async fn send_message(&self, msg: &str, channel_id: ChannelId, http: Arc<HttpClient>)
+        -> Result<(), Box<dyn Error + Send + Sync>>
+    {
         http.create_message(channel_id)
-            .content(&format!("{}", self.battle))?
+            .content(msg)?
             .exec()
             .await?;
         Ok(())
     }
-
-    // async fn tick<F: FnMut(isize, isize) -> () + ?Sized>(&mut self, damage_bygone: &mut F) {
-    //     let (damage, hit_chance_roll) = self.battle.hero.shoot(&mut self.rng);
-    //     damage_bygone(damage, hit_chance_roll);
-    //     if self.battle.bygone.alive() {
-    //         let (damage, hit_chance_roll) = self.battle.bygone.shoot(&mut self.rng);
-    //         self.battle.hero.damage(
-    //             damage, hit_chance_roll
-    //         );
-    //     }
-    // }
 }
