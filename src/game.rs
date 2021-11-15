@@ -7,7 +7,7 @@ use crate::{bygone_03::Bygone03, entities::{AggressiveEntity, Entity, Random}, l
 pub struct Game {
     players: HashMap<i64, AggressiveEntity>,
     enemy: Bygone03,
-    rng: Cell<Random>,
+    rng: Random,
 }
 
 impl Game {
@@ -15,7 +15,7 @@ impl Game {
         Game {
             players: HashMap::new(),
             enemy: Bygone03::normal(),
-            rng: Cell::new(Random::new()),
+            rng: Random::new(),
         }
     }
 
@@ -34,11 +34,11 @@ impl Game {
             }
 
             match *command {
-                PlayerAction::StrikeCore => self.enemy.damage_core(&player.attack(), self.rng.get_mut()),
-                PlayerAction::StrikeSensor => self.enemy.damage_sensor(&player.attack(), self.rng.get_mut()),
-                PlayerAction::StrikeGun => self.enemy.damage_gun(&player.attack(), self.rng.get_mut()),
-                PlayerAction::StrikeLeftWing => self.enemy.damage_left_wing(&player.attack(), self.rng.get_mut()),
-                PlayerAction::StrikeRightWing => self.enemy.damage_right_wing(&player.attack(), self.rng.get_mut()),
+                PlayerAction::StrikeCore => self.enemy.damage_core(&player.attack(), &mut self.rng),
+                PlayerAction::StrikeSensor => self.enemy.damage_sensor(&player.attack(), &mut self.rng),
+                PlayerAction::StrikeGun => self.enemy.damage_gun(&player.attack(), &mut self.rng),
+                PlayerAction::StrikeLeftWing => self.enemy.damage_left_wing(&player.attack(), &mut self.rng),
+                PlayerAction::StrikeRightWing => self.enemy.damage_right_wing(&player.attack(), &mut self.rng),
             }
         }
 
@@ -50,8 +50,8 @@ impl Game {
             .values_mut()
             .filter(|player| player.vitality().health().alive())
             .collect::<Vec<_>>();
-        let victim = self.rng.get_mut().choose_mut(&mut living_players);
-        self.rng.get_mut().collide(self.enemy.attack(), victim.vitality_mut());
+        let victim = self.rng.choose_mut(&mut living_players);
+        self.rng.collide(self.enemy.attack(), victim.vitality_mut());
     }
 }
 

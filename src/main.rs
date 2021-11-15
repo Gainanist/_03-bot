@@ -7,16 +7,16 @@ mod language;
 mod command;
 mod player_action;
 
-use std::{borrow::BorrowMut, env, error::Error, slice::SliceIndex, sync::Arc};
+use std::{env, error::Error, slice::SliceIndex, sync::Arc};
 use command_parser::parse_command;
 use futures::stream::StreamExt;
 use game::Game;
-use language::Language;
+
 use localization::{Localizations, Localize};
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::{gateway::{Intents, payload::incoming::MessageCreate}, id::ChannelId};
+use twilight_model::{gateway::{Intents}, id::ChannelId};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -91,7 +91,7 @@ impl EventHandler {
                     }
                 }
                 
-                if let Some((command, language)) = parse_command(&msg.content) {
+                if let Some((_command, language)) = parse_command(&msg.content) {
                     let game = Game::new();
                     let localization = self.localizations.get(language);
                     self.send_message(&game.localize(localization), msg.channel_id, http).await?;
