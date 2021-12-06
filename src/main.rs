@@ -1,18 +1,19 @@
-mod entities;
-mod game;
+mod components;
+mod systems;
 mod bygone_03;
 mod localization;
 mod command_parser;
 mod language;
-mod command;
+mod player_command;
 mod player_action;
+mod dice;
 
 use std::{env, error::Error, slice::SliceIndex, sync::Arc};
 use command_parser::parse_command;
 use futures::stream::StreamExt;
-use game::Game;
+use systems::Game;
 
-use localization::{Localizations, Localize};
+use localization::{Localizations, RenderText};
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
@@ -94,7 +95,7 @@ impl EventHandler {
                 if let Some((_command, language)) = parse_command(&msg.content) {
                     let game = Game::new();
                     let localization = self.localizations.get(language);
-                    self.send_message(&game.localize(localization), msg.channel_id, http).await?;
+                    self.send_message(&game.render_text(localization), msg.channel_id, http).await?;
                 }
             }
             Event::ShardConnected(_) => {

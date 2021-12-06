@@ -1,10 +1,10 @@
-use crate::{command::TextCommand, language::Language};
+use crate::{player_command::PlayerCommand, language::Language};
 
-pub fn parse_command(source: &str) -> Option<(TextCommand, Language)> {
+pub fn parse_command(source: &str) -> Option<(PlayerCommand, Language)> {
     if source.contains("битв") || source.contains("сраж") {
-        Some((TextCommand::StartGame, Language::Ru))
+        Some((PlayerCommand::StartGame, Language::Ru))
     } else if source.contains("battl") || source.contains("fight") {
-        Some((TextCommand::StartGame, Language::En))
+        Some((PlayerCommand::StartGame, Language::En))
     } else {
         None
     }

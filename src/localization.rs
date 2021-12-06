@@ -23,8 +23,8 @@ pub struct Localization {
     pub title: String,
 }
 
-pub trait Localize {
-    fn localize(&self, localization: &Localization) -> String;
+pub trait RenderText {
+    fn render_text(&self, localization: &Localization) -> String;
 }
 
 pub struct Localizations(HashMap<Language, Localization>);
