@@ -1,20 +1,21 @@
-mod components;
-mod systems;
-mod bygone_03;
-mod localization;
-mod command_parser;
-mod language;
-mod player_command;
-mod player_action;
-mod dice;
+// mod components;
+// mod systems;
+// mod bygone_03;
+// mod localization;
+// mod command_parser;
+// mod language;
+// mod player_command;
+// mod dice;
+// mod events;
 
 use std::{env, error::Error, slice::SliceIndex, sync::Arc};
-use command_parser::parse_command;
+// use command_parser::parse_command;
 use futures::stream::StreamExt;
-use systems::Game;
+// use systems::Game;
 
-use localization::{Localizations, RenderText};
+// use localization::{Localizations, RenderText};
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
+use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
 use twilight_model::{gateway::{Intents}, id::ChannelId};
@@ -68,13 +69,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 struct EventHandler {
-    localizations: Localizations,
+    //  localizations: Localizations,
 }
 
 impl EventHandler {
     pub fn new() -> Self {
         EventHandler {
-            localizations: Localizations::new(),
+            // localizations: Localizations::new(),
         }
     }
 
@@ -86,16 +87,19 @@ impl EventHandler {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         match event {
             Event::MessageCreate(msg) => {
-                if let Some(app_id) = msg.application_id {
-                    if app_id.0.to_string() == env::var("APP_ID")? {
-                        ()
-                    }
-                }
+                if msg.author.bot {
+                    ()
+                } else {
                 
-                if let Some((_command, language)) = parse_command(&msg.content) {
-                    let game = Game::new();
-                    let localization = self.localizations.get(language);
-                    self.send_message(&game.render_text(localization), msg.channel_id, http).await?;
+                // if let Some((_command, language)) = parse_command(&msg.content) {
+                    // let game = Game::new();
+                    // let localization = self.localizations.get(language);
+                    //self.send_message(&game.render_text(localization), msg.channel_id, http).await?;
+                    self.send_message(
+                        "a\ta\naa\ta",
+                        msg.channel_id,
+                        http,
+                    ).await?;
                 }
             }
             Event::ShardConnected(_) => {
@@ -108,11 +112,37 @@ impl EventHandler {
         Ok(())
     }
 
-    async fn send_message(&self, msg: &str, channel_id: ChannelId, http: Arc<HttpClient>)
-        -> Result<(), Box<dyn Error + Send + Sync>>
+    async fn send_message(&self, _msg: &str, channel_id: ChannelId, http: Arc<HttpClient>)
+        -> Result<(), Box<dyn Error + Send + Sync>> 
     {
+        let embeds = [
+            EmbedBuilder::new()
+                .description("A wild _03 appeared!")
+                .image(ImageSource::url("http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif")?)
+                .build()?,
+            EmbedBuilder::new()
+                .field(EmbedFieldBuilder::new("Status", "ATK 2, ACC 100%, Core: armored").build())
+                .field(EmbedFieldBuilder::new(":regional_indicator_c:ore", "[▮▮] - 20%").inline())
+                .field(EmbedFieldBuilder::new(":regional_indicator_s:ensor", "[▮▮] - 50%").inline())
+                .field(EmbedFieldBuilder::new(":regional_indicator_l:eft wing", "[▮▮] - 70%").inline())
+                .field(EmbedFieldBuilder::new(":regional_indicator_r:ight wing", "[▮▮] - 70%").inline())
+                .field(EmbedFieldBuilder::new(":regional_indicator_g:un", "[▮▮] - 50%").inline())
+                .build()?,
+            EmbedBuilder::new()
+                .field(EmbedFieldBuilder::new("Battle log","> • _03 gently punches Rokari in the chest with a rubber bullet\n> • Rokari performs a drunken style attack\n> • Ultra_Scream has joined the fray").build())
+                .build()?,
+            EmbedBuilder::new()
+                .field(EmbedFieldBuilder::new("Rokari", "[▮▮▮▮▯▯]").inline())
+                .field(EmbedFieldBuilder::new("Ultra_Scream", "[▮▮▮▮▮]").inline())
+                .build()?,
+            // EmbedBuilder::new()
+            //     .description("Here's a cool image of Twilight Sparkle")
+            //     .image(ImageSource::url("http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif")?)
+            //     .build()?,
+        ];
         http.create_message(channel_id)
-            .content(msg)?
+            // .content(msg)?
+            .embeds(&embeds)?
             .exec()
             .await?;
         Ok(())

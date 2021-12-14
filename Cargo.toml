@@ -6,13 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.5.0", features = ["dynamic"] }
-enum-map = "1.1.1"
+# bevy = { version = "0.5.0", features = ["dynamic"] }
+# bevy_rng = "0.3.0"
+# enum-map = "1.1.1"
 futures = "0.3.17"
 itertools = "0.10.0"
 rand = "0.8.4"
 tokio = { version = "1.13.0", features = ["full"] }
-twilight-cache-inmemory = "0.7.1"
-twilight-gateway = "0.7.1"
-twilight-http = "0.7.1"
-twilight-model = "0.7.1"
+twilight-cache-inmemory = "0.8.0"
+twilight-embed-builder = "0.8.0"
+twilight-gateway = "0.8.0"
+twilight-http = "0.8.0"
+twilight-model = "0.8.0"

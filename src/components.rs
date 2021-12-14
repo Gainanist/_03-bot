@@ -2,7 +2,7 @@ use enum_map::Enum;
 
 use crate::{dice::DiceRoll, localization::{Localization, RenderText}};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Health {
     current: usize,
     max: usize,
@@ -43,7 +43,7 @@ impl RenderText for Health {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Vitality {
     health: Health,
     dodge: isize,
@@ -82,7 +82,7 @@ impl RenderText for Vitality {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Attack {
     damage: usize,
     accuracy: isize,
@@ -119,7 +119,7 @@ impl RenderText for Attack {
     }
 }
 
-#[derive(Clone, Copy, Enum, Debug)]
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum BygonePart {
     Core,
     Sensor,
@@ -128,7 +128,7 @@ pub enum BygonePart {
     RightWing,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Bygone03Stage {
     Armored,
     Exposed,
@@ -162,8 +162,12 @@ impl RenderText for Bygone03Stage {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Enemy;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Player;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Active;
+

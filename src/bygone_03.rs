@@ -1,7 +1,10 @@
+use std::{ops::DerefMut, collections::HashMap};
+
 use bevy::{prelude::*};
 use enum_map::{enum_map, EnumMap};
+use twilight_model::id::UserId;
 
-use crate::{components::*, localization::{Localization, RenderText}, dice::Dice};
+use crate::{components::*, localization::{Localization, RenderText}, dice::Dice, events::{DeactivateEvent, PlayerAttackEvent}};
 
 #[derive(Bundle, Clone, Debug)]
 pub struct Bygone03Bundle {
@@ -122,40 +125,109 @@ impl Bygone03Bundle {
     // }
 }
 
+fn damage_bygone(
+    mut commands: Commands,
+    mut ev_player_attack: EventReader<PlayerAttackEvent>,
+    mut dice: Local<bevy_rng::Rng>,
+    players: Query<(&UserId, &Attack), (With<Player>, With<Active>)>,
+    mut enemies: Query<(&mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
+) {
+    if let Ok((
+        body_parts,
+        bygone_attack,
+        stage
+    )) = enemies.single_mut() {
+        let target_parts: HashMap<_, _> = ev_player_attack.iter()
+            .map(|ev| (ev.0, ev.1))
+            .collect();
+
+        for (user_id, attack) in players.iter() {
+            if let Some(part) = target_parts.get(user_id) {
+                attack.attack(&mut body_parts[*part], dice.roll(100));
+                if !body_parts[*part].health().alive() {
+                    on_bygone_part_death(
+                        *part,
+                        body_parts.deref_mut(),
+                        bygone_attack.deref_mut(),
+                        stage.deref_mut(),
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn on_bygone_part_death(
+    dead_part: BygonePart,
+    body_parts: &mut EnumMap<BygonePart, Vitality>,
+    attack: &mut Attack,
+    stage: &mut Bygone03Stage
+) {
+    match dead_part {
+        BygonePart::Core => {
+            let core_max_health = body_parts[BygonePart::Core].health().max();
+            let core_dodge = body_parts[BygonePart::Core].dodge();
+            body_parts[BygonePart::Core] = Vitality::new(core_max_health, core_dodge);
+            *stage = stage.next();
+        }
+        BygonePart::Sensor => {
+            attack.modify_accuracy(-40);
+        },
+        BygonePart::Gun => {
+            attack.modify_accuracy(-30);
+        },
+        BygonePart::LeftWing | BygonePart::RightWing => {
+            body_parts.values_mut()
+                .for_each(|vitality| vitality.modify_dodge(-10));
+        },
+    }
+}
+
 fn damage_players(
     mut commands: Commands,
-    mut dice: Local<Dice>,
-    players: Query<(Entity, &Vitality), (With<Player>,)>,
-    enemies: Query<(&Attack,), (With<Enemy>,)>,
+    mut ev_deactivate: EventWriter<DeactivateEvent>,
+    mut dice: Local<bevy_rng::Rng>,
+    mut players: Query<(Entity, &mut Vitality), (With<Player>, With<Active>)>,
+    enemies: Query<&Attack, (With<Enemy>, With<Active>)>,
 ) {
-    let living_players = players.iter()
-        .filter(|(_, vitality)| vitality.health().alive())
-        .map(|(entity, _)| entity)
-        .collect::<Vec<Entity>>();
+    let mut players: Vec<_> = players.iter_mut().collect();
 
-    for (&attack,) in enemies.iter() {
-
+    for attack in enemies.iter() {
+        let (mut entity, mut target) = dice.choose_mut(&mut players);
+        attack.attack(target.deref_mut(), dice.roll(100));
+        if !target.health().alive() {
+            ev_deactivate.send(DeactivateEvent(entity));
+        }
     }
 }
 
-impl RenderText for Bygone03Bundle {
-    fn render_text(&self, localization: &Localization) -> String {
-        format!(
-"
-{}
-
-{}: {} - {}
-{}: {}
-{}: {}
-{}: {}
-{}: {}
-",
-            self.attack().render_text(localization),
-            localization.core, self.core.vitality().render_text(localization), self.stage.render_text(localization),
-            localization.sensor, self.sensor.vitality().render_text(localization),
-            localization.left_wing, self.left_wing.vitality().render_text(localization),
-            localization.right_wing, self.right_wing.vitality().render_text(localization),
-            localization.gun, self.gun.vitality().render_text(localization),
-        )
+fn deativate(
+    mut commands: Commands,
+    mut ev_deactivate: EventReader<DeactivateEvent>,
+) {
+    for ev in ev_deactivate.iter() {
+        commands.entity(ev.0).remove::<Active>();
     }
 }
+
+// impl RenderText for Bygone03Bundle {
+//     fn render_text(&self, localization: &Localization) -> String {
+//         format!(
+// "
+// {}
+
+// {}: {} - {}
+// {}: {}
+// {}: {}
+// {}: {}
+// {}: {}
+// ",
+//             self.attack().render_text(localization),
+//             localization.core, self.core.vitality().render_text(localization), self.stage.render_text(localization),
+//             localization.sensor, self.sensor.vitality().render_text(localization),
+//             localization.left_wing, self.left_wing.vitality().render_text(localization),
+//             localization.right_wing, self.right_wing.vitality().render_text(localization),
+//             localization.gun, self.gun.vitality().render_text(localization),
+//         )
+//     }
+// }
