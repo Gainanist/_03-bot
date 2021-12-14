@@ -117,7 +117,7 @@ impl EventHandler {
     {
         let embeds = [
             EmbedBuilder::new()
-                .description("A wild _03 appeared!")
+                .description("**A wild _03 appeared!**")
                 .image(ImageSource::url("http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif")?)
                 .build()?,
             EmbedBuilder::new()
@@ -129,7 +129,7 @@ impl EventHandler {
                 .field(EmbedFieldBuilder::new(":regional_indicator_g:un", "[▮▮] - 50%").inline())
                 .build()?,
             EmbedBuilder::new()
-                .field(EmbedFieldBuilder::new("Battle log","> • _03 gently punches Rokari in the chest with a rubber bullet\n> • Rokari performs a drunken style attack\n> • Ultra_Scream has joined the fray").build())
+                .field(EmbedFieldBuilder::new("Battle log", "> • _03 gently punches Rokari in the chest with a rubber bullet\n> • Rokari performs a drunken style attack\n> • Ultra_Scream has joined the fray").build())
                 .build()?,
             EmbedBuilder::new()
                 .field(EmbedFieldBuilder::new("Rokari", "[▮▮▮▮▯▯]").inline())
