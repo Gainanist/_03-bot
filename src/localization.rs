@@ -27,6 +27,7 @@ pub trait RenderText {
     fn render_text(&self, localization: &Localization) -> String;
 }
 
+#[derive(Clone, Debug)]
 pub struct Localizations(HashMap<Language, Localization>);
 
 impl Localizations {

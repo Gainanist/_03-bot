@@ -1,24 +1,30 @@
-// mod components;
-// mod systems;
-// mod bygone_03;
-// mod localization;
-// mod command_parser;
-// mod language;
-// mod player_command;
-// mod dice;
-// mod events;
+mod components;
+mod systems;
+mod bygone_03;
+mod localization;
+mod command_parser;
+mod language;
+mod player_command;
+mod dice;
+mod events;
 
-use std::{env, error::Error, slice::SliceIndex, sync::Arc};
-// use command_parser::parse_command;
-use futures::stream::StreamExt;
+use std::{env, error::Error, sync::Arc, task::Poll, pin::Pin};
+use command_parser::is_game_starting;
+use events::*;
+use futures::stream::{Stream, StreamExt};
+use localization::Localizations;
+use std::sync::mpsc::{self, Sender};
 // use systems::Game;
 
-// use localization::{Localizations, RenderText};
+use crate::{bygone_03::*, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME};
+
+use bevy::prelude::*;
+use bevy_rng::*;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
-use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
+use twilight_gateway::{cluster::{Cluster, ShardScheme, Events}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::{gateway::{Intents}, id::ChannelId};
+use twilight_model::{gateway::{Intents, payload::incoming::ReactionAdd}, id::ChannelId, channel::{Reaction, ReactionType}};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -29,7 +35,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let scheme = ShardScheme::Auto;
 
     // Use intents to only receive guild message events.
-    let (cluster, mut events) = Cluster::builder(token.to_owned(), Intents::GUILD_MESSAGES)
+    let (cluster, mut events) = Cluster::builder(
+        token.to_owned(),
+        Intents::GUILD_MESSAGES | Intents::GUILD_MESSAGE_REACTIONS
+    )
         .shard_scheme(scheme)
         .build()
         .await?;
@@ -48,24 +57,106 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     // Since we only care about new messages, make the cache only
     // cache new messages.
-    let cache = InMemoryCache::builder()
-        .resource_types(ResourceType::MESSAGE)
-        .build();
+    // let cache = InMemoryCache::builder()
+    //     .resource_types(ResourceType::MESSAGE | ResourceType::REACTION)
+    //     .build();
+    // let cache = Arc::new(cache);
 
-    let mut event_handler = EventHandler::new();
-    // Process each event as they come in.
-    while let Some((shard_id, event)) = events.next().await {
-        // Update the cache with the event.
-        cache.update(&event);
+    // let cache_write = Arc::clone(&cache);
 
-        event_handler.handle(
-            shard_id,
-            event,
-            Arc::clone(&http),
-        ).await?;
-    }
+    let (input_sender, input_receiver) = mpsc::channel();
+
+    tokio::spawn(async move {
+        fn process_reaction(reaction: &Reaction, sender: &Sender<InputEvent>) {
+            if let ReactionType::Unicode { name } = &reaction.emoji {
+                if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
+                    sender.send(InputEvent::PlayerAttack(PlayerAttackEvent(reaction.user_id, *bygone_part)));
+                }
+            }
+        }
+
+        let localizations = Localizations::new();
+        // Process each event as they come in.
+        while let Some((shard_id, event)) = events.next().await {
+            match event {
+                Event::MessageCreate(msg) => {
+                    if !msg.author.bot {
+                        if let Some(language) = is_game_starting(&msg.content) {
+                            let localization = localizations.get(language);
+                            input_sender.send(InputEvent::GameStart(GameStartEvent(localization.clone())));
+                        }
+                    }
+                },
+                Event::ReactionAdd(reaction) => process_reaction(&reaction.0, &input_sender),
+                Event::ReactionRemove(reaction) => process_reaction(&reaction.0, &input_sender),
+                Event::ShardConnected(_) => {
+                    println!("Connected on shard {}", shard_id);
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // let mut event_handler = EventHandler::new();
+    // // Process each event as they come in.
+    // while let Some((shard_id, event)) = events.next().await {
+    //     // Update the cache with the event.
+    //     cache.update(&event);
+
+    //     event_handler.handle(
+    //         shard_id,
+    //         event,
+    //         Arc::clone(&http),
+    //     ).await?;
+    // }
+
+    App::build()
+        .add_plugins(MinimalPlugins)
+        .add_plugin(RngPlugin::default())
+        .add_system(spawn_bygones.system())
+        .add_system(spawn_players.system())
+        .add_system(damage_bygone.system())
+        .add_system(damage_players.system())
+        .add_system(cleanup.system())
+        .run();
 
     Ok(())
+}
+
+// struct DiscordListener {
+//     events: Events,
+//     http: Arc<HttpClient>,
+//     cache: InMemoryCache,
+// }
+
+// impl Iterator for DiscordListener {
+//     type Item = Event;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if let Some((shard_id, event)) = self.events.next() {
+//             // Update the cache with the event.
+//             self.cache.update(&event);
+//             Some(event)1
+//         }
+//         None
+//     }
+// }
+
+fn listen(
+    mut event_cache: Local<Option<Arc<InMemoryCache>>>,
+    mut game_on: ResMut<bool>,
+    mut ev_game_start: EventWriter<GameStartEvent>,
+    mut ev_player_attack: EventWriter<PlayerAttackEvent>,
+) {
+    if let Some(event_cache) = &mut *event_cache {
+        for event in event_cache.iter().messages() {
+            let m = event.value();
+        }
+        for event in event_cache.iter().emojis() {
+            
+        }
+        event_cache.clear();
+    }
 }
 
 struct EventHandler {

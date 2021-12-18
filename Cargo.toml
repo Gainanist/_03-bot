@@ -6,11 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# bevy = { version = "0.5.0", features = ["dynamic"] }
-# bevy_rng = "0.3.0"
-# enum-map = "1.1.1"
+bevy = { version = "0.5.0", features = ["dynamic"] }
+bevy_rng = { git = "https://github.com/dylanrenwick/bevy_rng", rev = "82bb2b5f4f88143665357fce2075f3cac88acb0a", features = ["bevy-stable"] }
+enum-map = "1.1.1"
 futures = "0.3.17"
 itertools = "0.10.0"
+phf = { version = "0.10.1", features = ["macros"] }
 rand = "0.8.4"
 tokio = { version = "1.13.0", features = ["full"] }
 twilight-cache-inmemory = "0.8.0"

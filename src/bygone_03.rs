@@ -4,7 +4,7 @@ use bevy::{prelude::*};
 use enum_map::{enum_map, EnumMap};
 use twilight_model::id::UserId;
 
-use crate::{components::*, localization::{Localization, RenderText}, dice::Dice, events::{DeactivateEvent, PlayerAttackEvent}};
+use crate::{components::*, localization::{Localization, RenderText}, dice::Dice, events::*};
 
 #[derive(Bundle, Clone, Debug)]
 pub struct Bygone03Bundle {
@@ -12,6 +12,7 @@ pub struct Bygone03Bundle {
     attack: Attack,
     stage: Bygone03Stage,
     _enemy: Enemy,
+    _active: Active,
 }
 
 impl Bygone03Bundle {
@@ -30,6 +31,7 @@ impl Bygone03Bundle {
             attack,
             stage: Bygone03Stage::Armored,
             _enemy: Enemy,
+            _active: Active,
         }
     }
 
@@ -125,17 +127,64 @@ impl Bygone03Bundle {
     // }
 }
 
-fn damage_bygone(
+#[derive(Bundle, Clone, Debug)]
+pub struct PlayerBundle {
+    user_id: UserId,
+    vitality: Vitality,
+    attack: Attack,
+    _player: Player,
+    _active: Active,
+}
+
+impl PlayerBundle {
+    pub fn new(user_id: UserId) -> Self {
+        Self {
+            user_id,
+            vitality: Vitality::new(6, 0),
+            attack: Attack::new(1, 0),
+            _player: Player,
+            _active: Active,
+        }
+    }
+
+}
+
+pub fn spawn_bygones(mut commands: Commands, mut ev_game_start: EventReader<GameStartEvent>) {
+    for _ev in ev_game_start.iter() {
+        commands.spawn_bundle(Bygone03Bundle::with_normal_health());
+    }
+}
+
+pub fn spawn_players(mut commands: Commands, mut ev_player_join: EventReader<PlayerJoinEvent>) {
+    for ev in ev_player_join.iter() {
+        commands.spawn_bundle(PlayerBundle::new(ev.0));
+    }
+}
+
+pub fn cleanup(
     mut commands: Commands,
+    mut ev_game_end: EventReader<GameEndEvent>,
+    entities: Query<(Entity,)>,
+) {
+    for _ev in ev_game_end.iter() {
+        for (entity,) in entities.iter() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+pub fn damage_bygone(
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
+    mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut dice: Local<bevy_rng::Rng>,
     players: Query<(&UserId, &Attack), (With<Player>, With<Active>)>,
-    mut enemies: Query<(&mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
+    mut enemies: Query<(Entity, &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
 ) {
     if let Ok((
-        body_parts,
-        bygone_attack,
-        stage
+        bygone_entity,
+        mut body_parts,
+        mut bygone_attack,
+        mut stage
     )) = enemies.single_mut() {
         let target_parts: HashMap<_, _> = ev_player_attack.iter()
             .map(|ev| (ev.0, ev.1))
@@ -151,6 +200,9 @@ fn damage_bygone(
                         bygone_attack.deref_mut(),
                         stage.deref_mut(),
                     );
+                    if *part == BygonePart::Core && stage.terminal() {
+                        ev_deactivate.send(DeactivateEvent(bygone_entity));
+                    }
                 }
             }
         }
@@ -183,8 +235,7 @@ fn on_bygone_part_death(
     }
 }
 
-fn damage_players(
-    mut commands: Commands,
+pub fn damage_players(
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut dice: Local<bevy_rng::Rng>,
     mut players: Query<(Entity, &mut Vitality), (With<Player>, With<Active>)>,
@@ -193,15 +244,15 @@ fn damage_players(
     let mut players: Vec<_> = players.iter_mut().collect();
 
     for attack in enemies.iter() {
-        let (mut entity, mut target) = dice.choose_mut(&mut players);
+        let (entity, target) = dice.choose_mut(&mut players);
         attack.attack(target.deref_mut(), dice.roll(100));
         if !target.health().alive() {
-            ev_deactivate.send(DeactivateEvent(entity));
+            ev_deactivate.send(DeactivateEvent(*entity));
         }
     }
 }
 
-fn deativate(
+pub fn deativate(
     mut commands: Commands,
     mut ev_deactivate: EventReader<DeactivateEvent>,
 ) {
