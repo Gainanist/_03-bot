@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use twilight_model::id::UserId;
+use twilight_model::id::{UserId, MessageId};
 
 use crate::{components::BygonePart, localization::Localization};
 
@@ -10,7 +10,7 @@ pub struct DeactivateEvent(pub Entity);
 pub struct PlayerAttackEvent(pub UserId, pub BygonePart);
 
 #[derive(Clone, Debug)]
-pub struct GameStartEvent(pub Localization);
+pub struct GameStartEvent(pub UserId, pub Localization);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct GameEndEvent;

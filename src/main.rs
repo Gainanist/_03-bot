@@ -8,23 +8,24 @@ mod player_command;
 mod dice;
 mod events;
 
-use std::{env, error::Error, sync::Arc, task::Poll, pin::Pin};
+use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, task::Poll, pin::Pin, time::Duration, collections::HashMap, num::NonZeroU64};
 use command_parser::is_game_starting;
+use components::{Player, Active};
 use events::*;
 use futures::stream::{Stream, StreamExt};
-use localization::Localizations;
+use localization::{Localizations, Localization};
 use std::sync::mpsc::{self, Sender};
 // use systems::Game;
 
 use crate::{bygone_03::*, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME};
 
-use bevy::prelude::*;
+use bevy::{prelude::*, app::ScheduleRunnerSettings};
 use bevy_rng::*;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 use twilight_gateway::{cluster::{Cluster, ShardScheme, Events}, Event};
-use twilight_http::Client as HttpClient;
-use twilight_model::{gateway::{Intents, payload::incoming::ReactionAdd}, id::ChannelId, channel::{Reaction, ReactionType}};
+use twilight_http::{Client as HttpClient, response::ResponseFuture};
+use twilight_model::{gateway::{Intents, payload::incoming::ReactionAdd}, id::{ChannelId, MessageId, UserId}, channel::{Reaction, ReactionType, embed::Embed, Message}};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -64,10 +65,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     // let cache_write = Arc::clone(&cache);
 
+    let guild_ids: Arc<Mutex<HashMap<GameId, MessageId>>> = Arc::new(Mutex::new(HashMap::new()));
+    let guild_ids_input = Arc::clone(&guild_ids);
+    let guild_ids_output = Arc::clone(&guild_ids);
+
     let (input_sender, input_receiver) = mpsc::channel();
 
     tokio::spawn(async move {
-        fn process_reaction(reaction: &Reaction, sender: &Sender<InputEvent>) {
+        fn process_reaction(reaction: &Reaction, sender: &Sender<InputEvent>, guild_ids: &Arc<Mutex<HashMap<GameId, MessageId>>>) {
             if let ReactionType::Unicode { name } = &reaction.emoji {
                 if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
                     sender.send(InputEvent::PlayerAttack(PlayerAttackEvent(reaction.user_id, *bygone_part)));
@@ -83,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     if !msg.author.bot {
                         if let Some(language) = is_game_starting(&msg.content) {
                             let localization = localizations.get(language);
-                            input_sender.send(InputEvent::GameStart(GameStartEvent(localization.clone())));
+                            input_sender.send(InputEvent::GameStart(GameStartEvent(msg.author.id, localization.clone())));
                         }
                     }
                 },
@@ -93,6 +98,42 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     println!("Connected on shard {}", shard_id);
                 }
                 _ => {}
+            }
+        }
+    });
+
+    let http_write = Arc::clone(&http);
+    let (output_sender, output_receiver) = mpsc::channel::<GameRenderMessage>();
+
+    tokio::spawn(async move {
+        let mut message_ids = HashMap::new();
+        async fn send_game_message(
+            http: &HttpClient,
+            message_ids: &mut HashMap<GameId, MessageId>,
+            msg: GameRenderMessage
+        ) -> Result<(), Box<dyn Error + Send + Sync>> {
+            match message_ids.get(&msg.game_id) {
+                Some(message_id) => {
+                    http.update_message(msg.channel_id, *message_id)
+                        .embeds(&[])?
+                        .embeds(&msg.embeds)?
+                        .exec()
+                        .await?;
+                },
+                None => {
+                    let x = http.create_message(msg.channel_id)
+                        .embeds(&msg.embeds)?
+                        .exec()
+                        .await?;
+                    x.model().await.into_ok().id;
+                }
+            };
+            Ok(())
+        }
+        loop {
+            let msg = output_receiver.recv_timeout(Duration::from_secs(1));
+            if let Ok(msg) = msg {
+                send_game_message(&http_write, msg).await;
             }
         }
     });
@@ -111,6 +152,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // }
 
     App::build()
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(5)))
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_system(spawn_bygones.system())
@@ -121,6 +163,26 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .run();
 
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GameId(pub NonZeroU64);
+
+#[derive(Clone, Debug)]
+struct GameRenderMessage {
+    embeds: Vec<Embed>,
+    channel_id: ChannelId,
+    game_id: GameId,
+}
+
+impl GameRenderMessage {
+    fn new(embeds: Vec<Embed>, channel_id: ChannelId, game_id: GameId) -> Self {
+        Self {
+            embeds,
+            channel_id,
+            game_id,
+        }
+    }
 }
 
 // struct DiscordListener {
@@ -143,11 +205,32 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 // }
 
 fn listen(
-    mut event_cache: Local<Option<Arc<InMemoryCache>>>,
-    mut game_on: ResMut<bool>,
+    mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
+    mut game: ResMut<Option<Game>>,
     mut ev_game_start: EventWriter<GameStartEvent>,
     mut ev_player_attack: EventWriter<PlayerAttackEvent>,
+    mut ev_player_join: EventWriter<PlayerJoinEvent>,
+    players: Query<(&UserId, Option<&Active>), (With<Player>,)>,
 ) {
+    let events = Vec::new();
+    if let Some(input_receiver) = &mut *input_receiver {
+        if let Ok(ref mut receiver_lock) = input_receiver.try_lock() {
+            while let Ok(event) = receiver_lock.recv() {
+                events.push(event);
+            }
+        }
+    }
+
+    let players: HashMap<_, _> = players.iter().collect();
+
+    for event in events.into_iter() {
+        match event {
+            InputEvent::GameStart(GameStartEvent(user_id, localization)) => {
+
+            }
+        }
+    }
+    
     if let Some(event_cache) = &mut *event_cache {
         for event in event_cache.iter().messages() {
             let m = event.value();
@@ -156,6 +239,21 @@ fn listen(
             
         }
         event_cache.clear();
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Game {
+    message_id: MessageId,
+    localization: Localization,
+}
+
+impl Game {
+    fn new(message_id: MessageId, localization: Localization) -> Self {
+        Self {
+            message_id,
+            localization,
+        }
     }
 }
 
