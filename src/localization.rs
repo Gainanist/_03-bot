@@ -20,6 +20,7 @@ pub struct Localization {
     pub core_burning: String,
     pub core_destroyed: String,
 
+    pub intro: String,
     pub title: String,
 }
 
@@ -49,6 +50,7 @@ impl Localizations {
             core_burning: "ГОРИТ!".to_string(),
             core_destroyed: "УНИЧТОЖЕНО!".to_string(),
 
+            intro: "*Приближается новая угроза...*".to_string(),
             title: "УНИЧ... ТОЖИТЬ.".to_string(),
         };
         
@@ -69,6 +71,7 @@ impl Localizations {
             core_burning: "BURNING!".to_string(),
             core_destroyed: "DESTROYED!".to_string(),
 
+            intro: "*A new threat is approaching...*".to_string(),
             title: "DES... TROY.".to_string(),
         };
 

@@ -2,12 +2,13 @@ use std::{ops::DerefMut, collections::HashMap};
 
 use bevy::{prelude::*};
 use enum_map::{enum_map, EnumMap};
-use twilight_model::id::UserId;
+use twilight_model::id::{UserId, ChannelId};
 
 use crate::{components::*, localization::{Localization, RenderText}, dice::Dice, events::*};
 
 #[derive(Bundle, Clone, Debug)]
 pub struct Bygone03Bundle {
+    channel: ChannelId,
     parts: EnumMap<BygonePart, Vitality>,
     attack: Attack,
     stage: Bygone03Stage,
@@ -16,7 +17,7 @@ pub struct Bygone03Bundle {
 }
 
 impl Bygone03Bundle {
-    pub fn new(parts_health: usize) -> Self {
+    pub fn new(parts_health: usize, channel: ChannelId) -> Self {
         let parts = enum_map! {
             BygonePart::Core => Vitality::new(parts_health, 80),
             BygonePart::Sensor => Vitality::new(parts_health, 70),
@@ -27,6 +28,7 @@ impl Bygone03Bundle {
         let attack = Attack::new(1, 100);
     
         Self {
+            channel,
             parts,
             attack,
             stage: Bygone03Stage::Armored,
@@ -35,8 +37,8 @@ impl Bygone03Bundle {
         }
     }
 
-    pub fn with_normal_health() -> Self {
-        Self::new(1)
+    pub fn with_normal_health(channel: ChannelId) -> Self {
+        Self::new(1, channel)
     }
 
     // pub fn alive(&self) -> bool {
@@ -130,6 +132,7 @@ impl Bygone03Bundle {
 #[derive(Bundle, Clone, Debug)]
 pub struct PlayerBundle {
     user_id: UserId,
+    channel: ChannelId,
     vitality: Vitality,
     attack: Attack,
     _player: Player,
@@ -137,9 +140,10 @@ pub struct PlayerBundle {
 }
 
 impl PlayerBundle {
-    pub fn new(user_id: UserId) -> Self {
+    pub fn new(user_id: UserId, channel: ChannelId) -> Self {
         Self {
             user_id,
+            channel,
             vitality: Vitality::new(6, 0),
             attack: Attack::new(1, 0),
             _player: Player,
@@ -150,14 +154,14 @@ impl PlayerBundle {
 }
 
 pub fn spawn_bygones(mut commands: Commands, mut ev_game_start: EventReader<GameStartEvent>) {
-    for _ev in ev_game_start.iter() {
-        commands.spawn_bundle(Bygone03Bundle::with_normal_health());
+    for ev in ev_game_start.iter() {
+        commands.spawn_bundle(Bygone03Bundle::with_normal_health(ev.channel));
     }
 }
 
 pub fn spawn_players(mut commands: Commands, mut ev_player_join: EventReader<PlayerJoinEvent>) {
     for ev in ev_player_join.iter() {
-        commands.spawn_bundle(PlayerBundle::new(ev.0));
+        commands.spawn_bundle(PlayerBundle::new(ev.player, ev.channel));
     }
 }
 
@@ -177,21 +181,21 @@ pub fn damage_bygone(
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut dice: Local<bevy_rng::Rng>,
-    players: Query<(&UserId, &Attack), (With<Player>, With<Active>)>,
-    mut enemies: Query<(Entity, &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
+    players: Query<(&UserId, &ChannelId, &Attack), (With<Player>, With<Active>)>,
+    mut enemies: Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
 ) {
-    if let Ok((
-        bygone_entity,
-        mut body_parts,
+    for (bygone_entity,
+        channel, mut
+        body_parts,
         mut bygone_attack,
-        mut stage
-    )) = enemies.single_mut() {
+        mut stage,
+    ) in enemies.iter_mut() {
         let target_parts: HashMap<_, _> = ev_player_attack.iter()
-            .map(|ev| (ev.0, ev.1))
+            .map(|ev| ((ev.player, ev.channel), ev.target))
             .collect();
 
-        for (user_id, attack) in players.iter() {
-            if let Some(part) = target_parts.get(user_id) {
+        for (user_id, channel, attack) in players.iter() {
+            if let Some(part) = target_parts.get(&(*user_id, *channel)) {
                 attack.attack(&mut body_parts[*part], dice.roll(100));
                 if !body_parts[*part].health().alive() {
                     on_bygone_part_death(
