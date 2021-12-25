@@ -165,77 +165,76 @@ pub fn spawn_players(mut commands: Commands, mut ev_player_join: EventReader<Pla
     }
 }
 
-pub fn cleanup(
-    mut commands: Commands,
-    mut ev_game_end: EventReader<GameEndEvent>,
-    entities: Query<(Entity,)>,
+pub fn damage_bygone(
+    mut ev_player_attack: EventReader<PlayerAttackEvent>,
+    mut ev_part_death: EventWriter<BygonePartDeathEvent>,
+    mut dice: Local<bevy_rng::Rng>,
+    mut actors: QuerySet<(
+        Query<(&UserId, &ChannelId, &Attack), (With<Player>, With<Active>)>,
+        Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>), (With<Enemy>, With<Active>)>,
+    )>,
 ) {
-    for _ev in ev_game_end.iter() {
-        for (entity,) in entities.iter() {
-            commands.entity(entity).despawn();
+    let target_parts: HashMap<_, _> = ev_player_attack.iter()
+        .map(|ev| ((ev.player, ev.channel), ev.target))
+        .collect();
+    
+    let attacks: HashMap<_, _> = actors.q0().iter()
+        .map(|(user_id, channel_id, attack)| (*channel_id, (*user_id, *attack)))
+        .collect();
+
+    for (bygone_entity,
+        enemy_channel,
+        mut body_parts,
+    ) in actors.q1_mut().iter_mut() {
+        if let Some((user_id, attack)) = attacks.get(enemy_channel) {
+            if let Some(part) = target_parts.get(&(*user_id, *enemy_channel)) {
+                attack.attack(&mut body_parts[*part], dice.roll(100));
+                if !body_parts[*part].health().alive() {
+                    ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
+                }
+            }
+
         }
     }
 }
 
-pub fn damage_bygone(
-    mut ev_player_attack: EventReader<PlayerAttackEvent>,
+pub fn process_bygone_part_death(
+    mut ev_part_death: EventReader<BygonePartDeathEvent>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
-    mut dice: Local<bevy_rng::Rng>,
-    players: Query<(&UserId, &ChannelId, &Attack), (With<Player>, With<Active>)>,
-    mut enemies: Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
+    mut bygones: Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
 ) {
-    for (bygone_entity,
-        channel, mut
-        body_parts,
-        mut bygone_attack,
-        mut stage,
-    ) in enemies.iter_mut() {
-        let target_parts: HashMap<_, _> = ev_player_attack.iter()
-            .map(|ev| ((ev.player, ev.channel), ev.target))
-            .collect();
-
-        for (user_id, channel, attack) in players.iter() {
-            if let Some(part) = target_parts.get(&(*user_id, *channel)) {
-                attack.attack(&mut body_parts[*part], dice.roll(100));
-                if !body_parts[*part].health().alive() {
-                    on_bygone_part_death(
-                        *part,
-                        body_parts.deref_mut(),
-                        bygone_attack.deref_mut(),
-                        stage.deref_mut(),
-                    );
-                    if *part == BygonePart::Core && stage.terminal() {
+    for BygonePartDeathEvent { entity, part } in ev_part_death.iter() {
+        for (bygone_entity,
+            _channel,
+            ref mut parts,
+            ref mut attack,
+            ref mut stage
+        ) in bygones.iter_mut() {
+            if bygone_entity != *entity {
+                continue;
+            }
+            match part {
+                BygonePart::Core => {
+                    let core_max_health = parts[BygonePart::Core].health().max();
+                    let core_dodge = parts[BygonePart::Core].dodge();
+                    parts[BygonePart::Core] = Vitality::new(core_max_health, core_dodge);
+                    **stage = stage.next();
+                    if stage.terminal() {
                         ev_deactivate.send(DeactivateEvent(bygone_entity));
                     }
                 }
+                BygonePart::Sensor => {
+                    attack.modify_accuracy(-40);
+                },
+                BygonePart::Gun => {
+                    attack.modify_accuracy(-30);
+                },
+                BygonePart::LeftWing | BygonePart::RightWing => {
+                    parts.values_mut()
+                        .for_each(|vitality| vitality.modify_dodge(-10));
+                },
             }
         }
-    }
-}
-
-fn on_bygone_part_death(
-    dead_part: BygonePart,
-    body_parts: &mut EnumMap<BygonePart, Vitality>,
-    attack: &mut Attack,
-    stage: &mut Bygone03Stage
-) {
-    match dead_part {
-        BygonePart::Core => {
-            let core_max_health = body_parts[BygonePart::Core].health().max();
-            let core_dodge = body_parts[BygonePart::Core].dodge();
-            body_parts[BygonePart::Core] = Vitality::new(core_max_health, core_dodge);
-            *stage = stage.next();
-        }
-        BygonePart::Sensor => {
-            attack.modify_accuracy(-40);
-        },
-        BygonePart::Gun => {
-            attack.modify_accuracy(-30);
-        },
-        BygonePart::LeftWing | BygonePart::RightWing => {
-            body_parts.values_mut()
-                .for_each(|vitality| vitality.modify_dodge(-10));
-        },
     }
 }
 
@@ -264,25 +263,3 @@ pub fn deativate(
         commands.entity(ev.0).remove::<Active>();
     }
 }
-
-// impl RenderText for Bygone03Bundle {
-//     fn render_text(&self, localization: &Localization) -> String {
-//         format!(
-// "
-// {}
-
-// {}: {} - {}
-// {}: {}
-// {}: {}
-// {}: {}
-// {}: {}
-// ",
-//             self.attack().render_text(localization),
-//             localization.core, self.core.vitality().render_text(localization), self.stage.render_text(localization),
-//             localization.sensor, self.sensor.vitality().render_text(localization),
-//             localization.left_wing, self.left_wing.vitality().render_text(localization),
-//             localization.right_wing, self.right_wing.vitality().render_text(localization),
-//             localization.gun, self.gun.vitality().render_text(localization),
-//         )
-//     }
-// }

@@ -2,7 +2,7 @@ use enum_map::Enum;
 
 use crate::{dice::DiceRoll, localization::{Localization, RenderText}};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Health {
     current: usize,
     max: usize,
@@ -38,12 +38,21 @@ impl Health {
 }
 
 impl RenderText for Health {
-    fn render_text(&self, localization: &Localization) -> String {
-        format!("{}: {}/{}", localization.health, self.current, self.max)
+    fn render_text(&self, _localization: &Localization) -> String {
+        let current_health = String::from("▮")
+            .repeat(self.current());
+        let empty_health_char = match self.alive() {
+            true => "▯",
+            false => "X",
+        };
+        let empty_health = String::from(empty_health_char)
+            .repeat(self.max() - self.current());
+
+        format!("[{}{}]", current_health, empty_health)
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Vitality {
     health: Health,
     dodge: isize,
@@ -78,7 +87,7 @@ impl Vitality {
 
 impl RenderText for Vitality {
     fn render_text(&self, localization: &Localization) -> String {
-        format!("{}\t{} {}%", self.health.render_text(localization), localization.dodge, self.dodge)
+        format!("{} - {}%", self.health.render_text(localization), self.dodge)
     }
 }
 
@@ -115,7 +124,7 @@ impl Attack {
 
 impl RenderText for Attack {
     fn render_text(&self, localization: &Localization) -> String {
-        format!("{} {}\t{} {}%", localization.attack, self.damage, localization.accuracy, self.accuracy)
+        format!("{} {}, {} {}%", localization.attack, self.damage, localization.accuracy, self.accuracy)
     }
 }
 

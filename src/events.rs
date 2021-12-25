@@ -7,6 +7,21 @@ use crate::{components::BygonePart, localization::Localization};
 pub struct DeactivateEvent(pub Entity);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct BygonePartDeathEvent {
+    pub entity: Entity,
+    pub part: BygonePart,
+}
+
+impl BygonePartDeathEvent {
+    pub fn new(entity: Entity, part: BygonePart) -> Self {
+        Self {
+            entity,
+            part,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerAttackEvent {
     pub player: UserId,
     pub message: MessageId,
