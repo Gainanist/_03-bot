@@ -4,7 +4,7 @@ use bevy::{prelude::*};
 use enum_map::{enum_map, EnumMap};
 use twilight_model::id::{UserId, ChannelId};
 
-use crate::{components::*, localization::{Localization, RenderText}, dice::Dice, events::*};
+use crate::{components::*, dice::Dice, events::*};
 
 #[derive(Bundle, Clone, Debug)]
 pub struct Bygone03Bundle {
