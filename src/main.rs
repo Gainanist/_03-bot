@@ -6,7 +6,7 @@ mod language;
 mod dice;
 mod events;
 
-use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, Instant}, collections::{HashMap, HashSet}};
+use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, Instant, SystemTime}, collections::{HashMap, HashSet}, fs};
 use arrayvec::ArrayVec;
 use command_parser::is_game_starting;
 use components::{Player, Active, Vitality, Enemy, BygonePart, Attack, Bygone03Stage};
@@ -15,17 +15,20 @@ use events::*;
 use futures::{stream::{StreamExt}};
 use localization::{Localizations, Localization, RenderText};
 use std::sync::mpsc::{self, Sender};
-// use systems::Game;
 
 use crate::{bygone_03::*, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME};
 
 use bevy::{prelude::*, app::ScheduleRunnerSettings};
 use bevy_rng::*;
 
+use serde::{Deserialize, Serialize};
+
 use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
 use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId, UserId}, channel::{Reaction, ReactionType, embed::Embed}};
+
+const GAMES_FILENAME: &str = "games.json";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -110,6 +113,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
+    let games = match fs::read(GAMES_FILENAME) {
+        Ok(games_data) => match serde_json::from_slice(&games_data) {
+            Ok(deserialized_games) => deserialized_games,
+            Err(_) => HashMap::<ChannelId, Game>::new(),
+        },
+        Err(_) => HashMap::<ChannelId, Game>::new(),
+    };
+
     let listen_label = "listen";
     let spawn_label = "spawn";
     let damage_label = "damage";
@@ -120,7 +131,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     App::build()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(5)))
-        .insert_resource(HashMap::<ChannelId, Game>::new())
+        .insert_resource(games)
         .add_event::<BygonePartDeathEvent>()
         .add_event::<DeactivateEvent>()
         .add_event::<GameDeclineEvent>()
@@ -300,7 +311,7 @@ fn listen(
         match event {
             InputEvent::GameStart(ev) => {
                 let should_start_new_game = match games.get(&ev.channel) {
-                    Some(game) => game.status != GameStatus::Ongoing && game.start_time.elapsed().as_secs() > 60*60*20,
+                    Some(game) => game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60*20,
                     None => true,
                 };
                 if should_start_new_game {
@@ -309,7 +320,7 @@ fn listen(
                     ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.initial_player_name, ev.channel));
                 } else {    
                     let should_write_decline_message = match games.get(&ev.channel) {
-                        Some(game) => game.status != GameStatus::Ongoing && game.start_time.elapsed().as_secs() <= 60*60*20,
+                        Some(game) => game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) <= 60*60*20,
                         None => false,
                     };
                     if should_write_decline_message {
@@ -340,6 +351,13 @@ fn listen(
     }
 }
 
+fn elapsed_since(system_time: &SystemTime) -> u64 {
+    match system_time.elapsed() {
+        Ok(dur) => dur.as_secs(),
+        Err(_) => 0,
+    }
+}
+
 fn update_game_status(
     mut games: ResMut<HashMap<ChannelId, Game>>,
     active_players: Query<(&ChannelId,), (With<Player>, With<Active>)>,
@@ -360,16 +378,16 @@ fn update_game_status(
 
 }
 
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Enum, Eq, Hash, PartialEq, Serialize)]
 pub enum GameStatus {
     Ongoing,
     Won,
     Lost,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Game {
-    pub start_time: Instant,
+    pub start_time: SystemTime,
     pub message_id: MessageId,
     pub localization: Localization,
     pub status: GameStatus,
@@ -378,7 +396,7 @@ pub struct Game {
 impl Game {
     pub fn new(message_id: MessageId, localization: Localization) -> Self {
         Self {
-            start_time: Instant::now(),
+            start_time: SystemTime::now(),
             message_id,
             localization,
             status: GameStatus::Ongoing,
@@ -501,5 +519,11 @@ pub fn cleanup(
                 commands.entity(entity).despawn();
             }
         }
+    }
+}
+
+pub fn save_games(games: Res<HashMap<ChannelId, Game>>) {
+    if let Ok(serialized_games) = serde_json::to_string(&*games) {
+        fs::write(GAMES_FILENAME, serialized_games);
     }
 }
