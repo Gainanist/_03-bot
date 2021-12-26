@@ -6,7 +6,7 @@ mod language;
 mod dice;
 mod events;
 
-use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, Instant, SystemTime}, collections::{HashMap, HashSet}, fs};
+use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, SystemTime}, collections::{HashMap, HashSet}, fs, path::{PathBuf}};
 use arrayvec::ArrayVec;
 use command_parser::is_game_starting;
 use components::{Player, Active, Vitality, Enemy, BygonePart, Attack, Bygone03Stage};
@@ -28,7 +28,10 @@ use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
 use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId, UserId}, channel::{Reaction, ReactionType, embed::Embed}};
 
-const GAMES_FILENAME: &str = "games.json";
+fn get_games_filename() -> PathBuf {
+    let dir = env::current_dir().unwrap();
+    dir.join("games.json")
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -113,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
-    let games = match fs::read(GAMES_FILENAME) {
+    let games = match fs::read(get_games_filename()) {
         Ok(games_data) => match serde_json::from_slice(&games_data) {
             Ok(deserialized_games) => deserialized_games,
             Err(_) => HashMap::<ChannelId, Game>::new(),
@@ -154,6 +157,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             params.0 = Some(Some(Mutex::new(output_sender)));
         }).label(render_label).after(update_label))
         .add_system(cleanup.system().after(render_label))
+        .add_system(save_games.system())
         .run();
 
     Ok(())
@@ -196,14 +200,16 @@ struct GameRenderMessage {
     channel_id: ChannelId,
     message_id: MessageId,
     embeds: GameEmbeds,
+    start_battle: bool,
 }
 
 impl GameRenderMessage {
-    fn new(channel_id: ChannelId, message_id: MessageId) -> Self {
+    fn new(channel_id: ChannelId, message_id: MessageId, start_battle: bool) -> Self {
         Self {
             channel_id,
             message_id,
             embeds: GameEmbeds::new(),
+            start_battle,
         }
     }
 }
@@ -277,12 +283,17 @@ async fn send_game_message(
         .embeds(&msg.embeds.render())?
         .exec()
         .await?;
-    for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
-        http.create_reaction(msg.channel_id, msg.message_id, &RequestReactionType::Unicode { name: emoji_name })
-            .exec()
-            .await?;
+    if msg.start_battle {
+        for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
+            http.create_reaction(
+                    msg.channel_id,
+                    msg.message_id,
+                    &RequestReactionType::Unicode { name: emoji_name }
+                )
+                .exec()
+                .await?;
+        }
     }
-    // TODO: Add reactions
     Ok(())
 }
 
@@ -324,6 +335,9 @@ fn listen(
                         None => false,
                     };
                     if should_write_decline_message {
+                        if let Some(game) = games.get_mut(&ev.channel) {
+                            game.message_id = ev.message;
+                        }
                         ev_game_decline.send(GameDeclineEvent::new(ev.channel));
                     }
                 }
@@ -360,18 +374,28 @@ fn elapsed_since(system_time: &SystemTime) -> u64 {
 
 fn update_game_status(
     mut games: ResMut<HashMap<ChannelId, Game>>,
+    mut ev_deactivate: EventReader<DeactivateEvent>,
     active_players: Query<(&ChannelId,), (With<Player>, With<Active>)>,
     active_enemies: Query<(&ChannelId,), (With<Enemy>, With<Active>)>,
-    enemies: Query<(&ChannelId,), (With<Enemy>,)>,
+    entities: Query<(&ChannelId,), (Or<(With<Enemy>, With<Player>)>,)>,
 ) {
+    let deactivated: HashSet<_> = ev_deactivate.iter()
+        .filter_map(|ev| entities.get(ev.0).ok())
+        .map(|(channel_id,)| channel_id)
+        .collect();
+
     for (channel_id, game) in games.iter_mut().filter(|(_, game)| game.status == GameStatus::Ongoing) {
-        let initialized = enemies.iter().any(|(enemy_channel_id,)| enemy_channel_id.0 == channel_id.0);
+        let initialized = entities.iter().any(|(enemy_channel_id,)| enemy_channel_id.0 == channel_id.0);
         if !initialized {
             continue;
         }
-        if active_enemies.iter().all(|(enemy_channel_id,)| enemy_channel_id.0 != channel_id.0) {
+        if active_enemies.iter().all(|(enemy_channel_id,)|
+            enemy_channel_id != channel_id || deactivated.contains(enemy_channel_id)
+        ) {
             game.status = GameStatus::Won;
-        } else if active_players.iter().all(|(player_channel_id,)| player_channel_id.0 != channel_id.0) {
+        } else if active_players.iter().all(|(player_channel_id,)|
+            player_channel_id != channel_id || deactivated.contains(player_channel_id)
+        ) {
             game.status = GameStatus::Lost;
         }
     }
@@ -410,15 +434,28 @@ fn render(
     mut ev_game_decline: EventReader<GameDeclineEvent>,
     players: Query<(&String, &ChannelId, &Vitality), (With<Player>,)>,
     enemies: Query<(&ChannelId, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
+    changed_entites: Query<(&ChannelId,), (Or<(Changed<Vitality>, Changed<Attack>, Changed<EnumMap<BygonePart, Vitality>>)>,)>,
 ) {
     let declined_games: HashSet<_> = ev_game_decline.iter()
         .map(|ev| ev.channel)
         .collect();
 
+    let changed_games: HashSet<_> = changed_entites.iter()
+        .map(|(channel_id,)| channel_id)
+        .collect();
+
     let mut embeds: HashMap<_, _> = games.iter()
-        .map(|(channel_id, game)| {
+        .filter_map(|(channel_id, game)| {
+            if !changed_games.contains(channel_id) && !declined_games.contains(channel_id) {
+                return None;
+            }
+
             let loc = &game.localization;
-            let mut message = GameRenderMessage::new(*channel_id, game.message_id);
+            let mut message = GameRenderMessage::new(
+                *channel_id,
+                game.message_id,
+                !declined_games.contains(channel_id)
+            );
             message.embeds.title = Some(match declined_games.contains(channel_id) {
                 true => EmbedBuilder::new()
                     .description(&loc.battle_decline)
@@ -445,7 +482,7 @@ fn render(
                 },
             });
 
-            (channel_id, message)
+            Some((channel_id, message))
         })
         .collect();
 
@@ -524,6 +561,6 @@ pub fn cleanup(
 
 pub fn save_games(games: Res<HashMap<ChannelId, Game>>) {
     if let Ok(serialized_games) = serde_json::to_string(&*games) {
-        fs::write(GAMES_FILENAME, serialized_games);
+        fs::write(get_games_filename(), serialized_games);
     }
 }
