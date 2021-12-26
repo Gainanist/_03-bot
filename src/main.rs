@@ -6,7 +6,7 @@ mod language;
 mod dice;
 mod events;
 
-use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, Instant}, collections::HashMap};
+use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, Instant}, collections::{HashMap, HashSet}};
 use arrayvec::ArrayVec;
 use command_parser::is_game_starting;
 use components::{Player, Active, Vitality, Enemy, BygonePart, Attack, Bygone03Stage};
@@ -24,7 +24,7 @@ use bevy_rng::*;
 
 use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
-use twilight_http::{Client as HttpClient};
+use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
 use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId, UserId}, channel::{Reaction, ReactionType, embed::Embed}};
 
 #[tokio::main]
@@ -56,7 +56,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // HTTP is separate from the gateway, so create a new client.
     let http = Arc::new(HttpClient::new(token));
 
+    let me = http.current_user().exec().await?.model().await?;
+
     let http_input = Arc::clone(&http);
+    let me_input = me.clone();
     let (input_sender, input_receiver) = mpsc::channel();
 
     tokio::spawn(async move {
@@ -65,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         while let Some((shard_id, event)) = events.next().await {
             match event {
                 Event::MessageCreate(msg) => {
-                    if !msg.author.bot {
+                    if msg.author.id != me_input.id {
                         if let Some(language) = is_game_starting(&msg.content) {
                             let localization = localizations.get(language).clone();
                             let game_start_sender = input_sender.clone();
@@ -77,8 +80,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         }
                     }
                 },
-                Event::ReactionAdd(reaction) => process_reaction(&reaction.0, &input_sender),
-                Event::ReactionRemove(reaction) => process_reaction(&reaction.0, &input_sender),
+                Event::ReactionAdd(reaction) => {
+                    if reaction.0.user_id != me_input.id {
+                        process_reaction(&reaction.0, &input_sender)
+                    }
+                },
+                Event::ReactionRemove(reaction) => {
+                    if reaction.0.user_id != me_input.id {
+                        process_reaction(&reaction.0, &input_sender)
+                    }
+                },
                 Event::ShardConnected(_) => {
                     println!("Connected on shard {}", shard_id);
                 }
@@ -112,8 +123,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .insert_resource(HashMap::<ChannelId, Game>::new())
         .add_event::<BygonePartDeathEvent>()
         .add_event::<DeactivateEvent>()
+        .add_event::<GameDeclineEvent>()
         .add_event::<GameStartEvent>()
-        .add_event::<GameEndEvent>()
         .add_event::<PlayerAttackEvent>()
         .add_event::<PlayerJoinEvent>()
         .add_plugins(MinimalPlugins)
@@ -189,15 +200,23 @@ impl GameRenderMessage {
 fn process_reaction(reaction: &Reaction, sender: &Sender<InputEvent>) {
     if let ReactionType::Unicode { name } = &reaction.emoji {
         if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
+            let user_name = match &reaction.member {
+                Some(member) => match &member.nick {
+                    Some(nick) => nick,
+                    None => &member.user.name,
+                },
+                None => "Anon",
+            }.to_string();
+
             sender.send(InputEvent::PlayerAttack(
                 PlayerAttackEvent::new(
                     reaction.user_id,
+                    user_name,
                     reaction.message_id,
                     reaction.channel_id,
                     *bygone_part,
                 )
-            )
-        );
+            ));
         }
     }
 }
@@ -219,9 +238,17 @@ async fn start_game(sender: Sender<InputEvent>, http: Arc<HttpClient>, localizat
         .model()
         .await?
         .id;
+    let user_name = match &msg.member {
+        Some(member) => match &member.nick {
+            Some(nick) => nick,
+            None => &msg.author.name,
+        },
+        None => &msg.author.name,
+    }.to_string();
     sender.send(
         InputEvent::GameStart(GameStartEvent::new(
             msg.author.id,
+            user_name,
             message_id,
             msg.channel_id,
             localization,
@@ -239,6 +266,11 @@ async fn send_game_message(
         .embeds(&msg.embeds.render())?
         .exec()
         .await?;
+    for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
+        http.create_reaction(msg.channel_id, msg.message_id, &RequestReactionType::Unicode { name: emoji_name })
+            .exec()
+            .await?;
+    }
     // TODO: Add reactions
     Ok(())
 }
@@ -246,6 +278,7 @@ async fn send_game_message(
 fn listen(
     mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
     mut games: ResMut<HashMap<ChannelId, Game>>,
+    mut ev_game_decline: EventWriter<GameDeclineEvent>,
     mut ev_game_start: EventWriter<GameStartEvent>,
     mut ev_player_attack: EventWriter<PlayerAttackEvent>,
     mut ev_player_join: EventWriter<PlayerJoinEvent>,
@@ -254,7 +287,7 @@ fn listen(
     let mut events = Vec::new();
     if let Some(input_receiver) = &mut *input_receiver {
         if let Ok(ref mut receiver_lock) = input_receiver.try_lock() {
-            while let Ok(event) = receiver_lock.recv() {
+            while let Ok(event) = receiver_lock.try_recv() {
                 events.push(event);
             }
         }
@@ -267,13 +300,21 @@ fn listen(
         match event {
             InputEvent::GameStart(ev) => {
                 let should_start_new_game = match games.get(&ev.channel) {
-                    Some(game) => game.status != GameStatus::Ongoing || game.start_time.elapsed().as_secs() > 60*60*24,
+                    Some(game) => game.status != GameStatus::Ongoing && game.start_time.elapsed().as_secs() > 60*60*20,
                     None => true,
                 };
                 if should_start_new_game {
                     ev_game_start.send(ev.clone());
                     games.insert(ev.channel, Game::new(ev.message, ev.localization));
-                    ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.channel));
+                    ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.initial_player_name, ev.channel));
+                } else {    
+                    let should_write_decline_message = match games.get(&ev.channel) {
+                        Some(game) => game.status != GameStatus::Ongoing && game.start_time.elapsed().as_secs() <= 60*60*20,
+                        None => false,
+                    };
+                    if should_write_decline_message {
+                        ev_game_decline.send(GameDeclineEvent::new(ev.channel));
+                    }
                 }
             }
             InputEvent::PlayerAttack(ev) => {
@@ -287,6 +328,7 @@ fn listen(
                         None => {
                             ev_player_join.send(PlayerJoinEvent::new(
                                 ev.player.clone(),
+                                ev.player_name.clone(),
                                 ev.channel.clone(),
                             ));
                             ev_player_attack.send(ev);
@@ -300,13 +342,18 @@ fn listen(
 
 fn update_game_status(
     mut games: ResMut<HashMap<ChannelId, Game>>,
-    players: Query<(&ChannelId,), (With<Player>, With<Active>)>,
-    enemies: Query<(&ChannelId,), (With<Enemy>, With<Active>)>,
+    active_players: Query<(&ChannelId,), (With<Player>, With<Active>)>,
+    active_enemies: Query<(&ChannelId,), (With<Enemy>, With<Active>)>,
+    enemies: Query<(&ChannelId,), (With<Enemy>,)>,
 ) {
     for (channel_id, game) in games.iter_mut().filter(|(_, game)| game.status == GameStatus::Ongoing) {
-        if enemies.iter().all(|(enemy_channel_id,)| enemy_channel_id != channel_id) {
+        let initialized = enemies.iter().any(|(enemy_channel_id,)| enemy_channel_id.0 == channel_id.0);
+        if !initialized {
+            continue;
+        }
+        if active_enemies.iter().all(|(enemy_channel_id,)| enemy_channel_id.0 != channel_id.0) {
             game.status = GameStatus::Won;
-        } else if players.iter().all(|(player_channel_id,)| player_channel_id != channel_id) {
+        } else if active_players.iter().all(|(player_channel_id,)| player_channel_id.0 != channel_id.0) {
             game.status = GameStatus::Lost;
         }
     }
@@ -342,30 +389,42 @@ impl Game {
 fn render(
     sender: Local<Option<Mutex<Sender<GameRenderMessage>>>>,
     games: Res<HashMap<ChannelId, Game>>,
-    players: Query<(&UserId, &ChannelId, &Vitality), (With<Player>,)>,
+    mut ev_game_decline: EventReader<GameDeclineEvent>,
+    players: Query<(&String, &ChannelId, &Vitality), (With<Player>,)>,
     enemies: Query<(&ChannelId, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
+    let declined_games: HashSet<_> = ev_game_decline.iter()
+        .map(|ev| ev.channel)
+        .collect();
+
     let mut embeds: HashMap<_, _> = games.iter()
         .map(|(channel_id, game)| {
+            let loc = &game.localization;
             let mut message = GameRenderMessage::new(*channel_id, game.message_id);
-            message.embeds.title = Some(match game.status {
-                GameStatus::Ongoing => EmbedBuilder::new()
-                    .description("**A wild _03 appeared!**")
-                    .image(
-                        ImageSource::url(
-                            "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif"
-                        ).unwrap()
-                    )
+            message.embeds.title = Some(match declined_games.contains(channel_id) {
+                true => EmbedBuilder::new()
+                    .description(&loc.battle_decline)
                     .build()
                     .unwrap(),
-                GameStatus::Won => EmbedBuilder::new()
-                    .description("**Man triumphs over machine!**")
-                    .build()
-                    .unwrap(),
-                GameStatus::Lost => EmbedBuilder::new()
-                    .description("**This darkness… Am I… dead? It’s so peaceful.**")
-                    .build()
-                    .unwrap(),
+                false => match game.status {
+                    GameStatus::Ongoing => EmbedBuilder::new()
+                        .description(&loc.title)
+                        .image(
+                            ImageSource::url(
+                                "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif"
+                            ).unwrap()
+                        )
+                        .build()
+                        .unwrap(),
+                    GameStatus::Won => EmbedBuilder::new()
+                        .description(&loc.won)
+                        .build()
+                        .unwrap(),
+                    GameStatus::Lost => EmbedBuilder::new()
+                        .description(&loc.lost)
+                        .build()
+                        .unwrap(),
+                },
             });
 
             (channel_id, message)
@@ -379,7 +438,7 @@ fn render(
             }
             if let Some(message) = embeds.get_mut(channel_id) {
                 let loc = &game.localization;
-                let status = format!("{}, Core: {}", attack.render_text(loc), stage.render_text(loc));
+                let status = format!("{}, {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
                 let core = parts[BygonePart::Core].render_text(loc);
                 let sensor = parts[BygonePart::Sensor].render_text(loc);
                 let left_wing = parts[BygonePart::LeftWing].render_text(loc);
@@ -388,12 +447,12 @@ fn render(
 
                 message.embeds.enemies = Some(
                     EmbedBuilder::new()
-                        .field(EmbedFieldBuilder::new("Status", status).build())
-                        .field(EmbedFieldBuilder::new(":regional_indicator_c:ore", core).inline())
-                        .field(EmbedFieldBuilder::new(":regional_indicator_s:ensor", sensor).inline())
-                        .field(EmbedFieldBuilder::new(":regional_indicator_l:eft wing", left_wing).inline())
-                        .field(EmbedFieldBuilder::new(":regional_indicator_r:ight wing", right_wing).inline())
-                        .field(EmbedFieldBuilder::new(":regional_indicator_g:un", gun).inline())
+                        .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
+                        .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
+                        .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
+                        .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
+                        .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
+                        .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
                         .build()
                         .unwrap()
                 );
@@ -409,12 +468,12 @@ fn render(
             let loc = &game.localization;
             let mut players_embed_builder = EmbedBuilder::new();
 
-            for (user_id, player_channel_id, vitality) in players.iter() {
+            for (name, player_channel_id, vitality) in players.iter() {
                 if player_channel_id != channel_id {
                     continue;
                 }
                 players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
-                    user_id.0.to_string(),
+                    name,
                     vitality.health().render_text(loc)
                 ));
             }

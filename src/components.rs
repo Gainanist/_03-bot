@@ -1,6 +1,6 @@
 use enum_map::Enum;
 
-use crate::{dice::DiceRoll, localization::{Localization, RenderText}};
+use crate::{dice::IDiceRoll, localization::{Localization, RenderText}};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Health {
@@ -87,7 +87,11 @@ impl Vitality {
 
 impl RenderText for Vitality {
     fn render_text(&self, localization: &Localization) -> String {
-        format!("{} - {}%", self.health.render_text(localization), self.dodge)
+        if self.health.alive() {
+            format!("{} - {}%", self.health.render_text(localization), 100_usize.saturating_sub(self.dodge.max(0) as usize))
+        } else {
+            self.health.render_text(localization)
+        }
     }
 }
 
@@ -105,26 +109,18 @@ impl Attack {
         }
     }
 
-    pub fn damage(&self) -> usize {
-        self.damage
-    }
-
-    pub fn accuracy(&self) -> isize {
-        self.accuracy
-    }
-
     pub fn modify_accuracy(&mut self, modifier: isize) {
         self.accuracy += modifier
     }
 
-    pub fn attack(&self, target: &mut Vitality, dice_roll: DiceRoll) {
-        target.take_attack(self.damage, self.accuracy + dice_roll.0 as isize)
+    pub fn attack(&self, target: &mut Vitality, dice_roll: IDiceRoll) {
+        target.take_attack(self.damage, self.accuracy + dice_roll.0)
     }
 }
 
 impl RenderText for Attack {
     fn render_text(&self, localization: &Localization) -> String {
-        format!("{} {}, {} {}%", localization.attack, self.damage, localization.accuracy, self.accuracy)
+        format!("{} {}, {}%", localization.attack, self.damage, self.accuracy)
     }
 }
 

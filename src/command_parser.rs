@@ -1,4 +1,4 @@
-use phf::phf_map;
+use phf::phf_ordered_map;
 
 use crate::{language::Language, components::BygonePart};
 
@@ -12,10 +12,10 @@ pub fn is_game_starting(source: &str) -> Option<Language> {
     }
 }
 
-pub const BYGONE_PARTS_FROM_EMOJI_NAME: phf::Map<&str, BygonePart> = phf_map! {
-    ":regional_indicator_c:" => BygonePart::Core,
-    ":regional_indicator_s:" => BygonePart::Sensor,
-    ":regional_indicator_l:" => BygonePart::LeftWing,
-    ":regional_indicator_r:" => BygonePart::RightWing,
-    ":regional_indicator_g:" => BygonePart::Gun,
+pub const BYGONE_PARTS_FROM_EMOJI_NAME: phf::OrderedMap<&str, BygonePart> = phf_ordered_map! {
+    "🇨" => BygonePart::Core,
+    "🇸" => BygonePart::Sensor,
+    "🇱" => BygonePart::LeftWing,
+    "🇷" => BygonePart::RightWing,
+    "🇬" => BygonePart::Gun,
 };

@@ -21,18 +21,20 @@ impl BygonePartDeathEvent {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerAttackEvent {
     pub player: UserId,
+    pub player_name: String,
     pub message: MessageId,
     pub channel: ChannelId,
     pub target: BygonePart,
 }
 
 impl PlayerAttackEvent {
-    pub fn new(player: UserId, message: MessageId, channel: ChannelId, target: BygonePart) -> Self {
+    pub fn new(player: UserId, player_name: String, message: MessageId, channel: ChannelId, target: BygonePart) -> Self {
         Self {
             player,
+            player_name,
             message,
             channel,
             target,
@@ -43,15 +45,23 @@ impl PlayerAttackEvent {
 #[derive(Clone, Debug)]
 pub struct GameStartEvent {
     pub initial_player: UserId,
+    pub initial_player_name: String,
     pub message: MessageId,
     pub channel: ChannelId,
     pub localization: Localization,
 }
 
 impl GameStartEvent {
-    pub fn new(initial_player: UserId, message: MessageId, channel: ChannelId, localization: Localization) -> Self {
+    pub fn new(
+        initial_player: UserId,
+        initial_player_name: String,
+        message: MessageId,
+        channel: ChannelId,
+        localization: Localization,
+    ) -> Self {
         Self {
             initial_player,
+            initial_player_name,
             message,
             channel,
             localization,
@@ -60,18 +70,30 @@ impl GameStartEvent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct GameEndEvent;
+pub struct GameDeclineEvent {
+    pub channel: ChannelId,
+}
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+impl GameDeclineEvent {
+    pub fn new(channel: ChannelId) -> Self {
+        Self {
+            channel,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerJoinEvent {
     pub player: UserId,
+    pub player_name: String,
     pub channel: ChannelId,
 }
 
 impl PlayerJoinEvent {
-    pub fn new(player: UserId, channel: ChannelId) -> Self {
+    pub fn new(player: UserId, player_name: String, channel: ChannelId) -> Self {
         Self {
             player,
+            player_name,
             channel,
         }
     }
