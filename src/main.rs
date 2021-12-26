@@ -311,7 +311,7 @@ fn listen(
         match event {
             InputEvent::GameStart(ev) => {
                 let should_start_new_game = match games.get(&ev.channel) {
-                    Some(game) => game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60*20,
+                    Some(game) => game.status == GameStatus::Lost || game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60*20,
                     None => true,
                 };
                 if should_start_new_game {
@@ -320,7 +320,7 @@ fn listen(
                     ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.initial_player_name, ev.channel));
                 } else {    
                     let should_write_decline_message = match games.get(&ev.channel) {
-                        Some(game) => game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) <= 60*60*20,
+                        Some(game) => game.status == GameStatus::Won && elapsed_since(&game.start_time) <= 60*60*20,
                         None => false,
                     };
                     if should_write_decline_message {

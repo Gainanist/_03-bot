@@ -54,9 +54,9 @@ impl Localizations {
             core_destroyed: "УНИЧТОЖЕНО!".to_string(),
 
             intro: "*Враг близко...*".to_string(),
-            battle_decline: "Но никто не пришёл.".to_string(),
+            battle_decline: "*Но никто не пришёл.*".to_string(),
             title: "УНИЧ... ТОЖИТЬ.".to_string(),
-            lost: "Так темно… Я что, умер? Здесь так спокойно.".to_string(),
+            lost: "*Так темно… Я что, умер? Здесь так спокойно.*".to_string(),
             won: "*Человек торжествует над машиной!*".to_string(),
         };
         
@@ -77,7 +77,7 @@ impl Localizations {
             core_destroyed: "DESTROYED!".to_string(),
 
             intro: "*A new threat is approaching...*".to_string(),
-            battle_decline: "But nobody came.".to_string(),
+            battle_decline: "*But nobody came.*".to_string(),
             title: "A wild _03 appears!".to_string(),
             lost: "*This darkness… Am I… dead? It’s so peaceful.*".to_string(),
             won: "*Man triumphs over machine!*".to_string(),
