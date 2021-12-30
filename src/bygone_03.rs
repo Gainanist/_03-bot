@@ -102,6 +102,9 @@ pub fn damage_bygone(
     ) in actors.q1_mut().iter_mut() {
         if let Some((user_id, attack)) = attacks.get(enemy_channel) {
             if let Some(part) = target_parts.get(&(*user_id, *enemy_channel)) {
+                if !body_parts[*part].health().alive() {
+                    continue;
+                }
                 attack.attack(&mut body_parts[*part], dice.iroll(-50, 50));
                 if !body_parts[*part].health().alive() {
                     ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
@@ -180,26 +183,30 @@ pub fn damage_players(
     }
 }
 
-pub fn buffer_player_attacks(
-    buffer_duration: Res<BufferPlayerAttackDuration>,
-    mut buffer: Local<VecDeque<(Instant, PlayerAttackEvent)>>,
-    mut ev_player_buffer_attack: EventReader<PlayerBufferAttackEvent>,
+pub fn delay_events(
+    delay: Res<EventDelay>,
+    mut buffer: Local<VecDeque<(Instant, DelayedEvent)>>,
+    mut ev_delayed: EventReader<DelayedEvent>,
+    mut ev_game_draw: EventWriter<GameDrawEvent>,
     mut ev_player_attack: EventWriter<PlayerAttackEvent>,
 ) {
     let ready_count = buffer.iter()
-        .take_while(|(start, _)| start.elapsed() > buffer_duration.0)
+        .take_while(|(start, _)| start.elapsed() > delay.0)
         .count();
     for _ in 0..ready_count {
-        ev_player_attack.send(buffer.pop_front().unwrap().1);
+        match buffer.pop_front().unwrap().1 {
+            DelayedEvent::GameDraw(ev) => ev_game_draw.send(ev),
+            DelayedEvent::PlayerAttack(ev) => ev_player_attack.send(ev),
+        }
     }
 
-    for ev in ev_player_buffer_attack.iter() {
-        buffer.push_back((Instant::now(), ev.0.clone()));
+    for ev in ev_delayed.iter() {
+        buffer.push_back((Instant::now(), ev.clone()));
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct BufferPlayerAttackDuration(pub Duration);
+pub struct EventDelay(pub Duration);
 
 pub fn deactivate(
     mut commands: Commands,

@@ -124,12 +124,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
-    let games = match fs::read(get_games_filename()) {
-        Ok(games_data) => match serde_json::from_slice(&games_data) {
-            Ok(deserialized_games) => deserialized_games,
-            Err(_) => HashMap::<ChannelId, Game>::new(),
+    let games = match std::env::args().nth(1) {
+        Some(arg) => {
+            if arg != "-p" {
+                match fs::read(get_games_filename()) {
+                    Ok(games_data) => match serde_json::from_slice(&games_data) {
+                        Ok(deserialized_games) => deserialized_games,
+                        Err(_) => HashMap::<ChannelId, Game>::new(),
+                    },
+                    Err(_) => HashMap::<ChannelId, Game>::new(),
+                }
+            } else {
+                HashMap::new()
+            }
         },
-        Err(_) => HashMap::<ChannelId, Game>::new(),
+        None => HashMap::new(),
     };
 
     let listen_label = "listen";
@@ -142,15 +151,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     App::build()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
-        .insert_resource(BufferPlayerAttackDuration(Duration::from_millis(150)))
+        .insert_resource(EventDelay(Duration::from_millis(150)))
         .insert_resource(games)
         .add_event::<BygonePartDeathEvent>()
         .add_event::<DeactivateEvent>()
+        .add_event::<DelayedEvent>()
         .add_event::<EnemyAttackEvent>()
         .add_event::<GameDrawEvent>()
         .add_event::<GameStartEvent>()
         .add_event::<PlayerAttackEvent>()
-        .add_event::<PlayerBufferAttackEvent>()
         .add_event::<PlayerJoinEvent>()
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
@@ -158,7 +167,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             params.0 = Some(Some(Mutex::new(input_receiver)));
         }).label(listen_label))
         .add_system(turn_timer.system())
-        .add_system(buffer_player_attacks.system())
+        .add_system(delay_events.system())
         .add_system(spawn_bygones.system().label(spawn_label).after(listen_label))
         .add_system(spawn_players.system().label(spawn_label).after(listen_label))
         .add_system(damage_bygone.system().label(damage_label).after(spawn_label))
@@ -245,7 +254,7 @@ fn process_reaction(
     current_user: &CurrentUser,
     game_message_ids: &Mutex<HashSet<MessageId>>,
 ) {
-    if reaction.user_id != current_user.id {
+    if reaction.user_id == current_user.id {
         return;
     }
     if let Ok(game_message_ids_lock) = game_message_ids.lock() {
@@ -336,10 +345,9 @@ async fn send_game_message(
 fn listen(
     mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
     mut games: ResMut<HashMap<ChannelId, Game>>,
-    mut ev_game_draw: EventWriter<GameDrawEvent>,
     mut ev_game_start: EventWriter<GameStartEvent>,
     mut ev_player_attack: EventWriter<PlayerAttackEvent>,
-    mut ev_player_buffer_attack: EventWriter<PlayerBufferAttackEvent>,
+    mut ev_delayed: EventWriter<DelayedEvent>,
     mut ev_player_join: EventWriter<PlayerJoinEvent>,
     players: Query<(&UserId, Option<&Active>), (With<Player>,)>,
 ) {
@@ -371,7 +379,7 @@ fn listen(
                         ev.localization
                     ));
                     ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.initial_player_name, ev.channel));
-                    ev_game_draw.send(GameDrawEvent::new(ev.channel));
+                    ev_delayed.send(DelayedEvent::GameDraw(GameDrawEvent::new(ev.channel)));
                 }
             }
             InputEvent::PlayerAttack(ev) => {
@@ -388,7 +396,7 @@ fn listen(
                                 ev.player_name.clone(),
                                 ev.channel.clone(),
                             ));
-                            ev_player_buffer_attack.send(PlayerBufferAttackEvent(ev));
+                            ev_delayed.send(DelayedEvent::PlayerAttack(ev));
                         }
                     }
                 }
@@ -471,28 +479,32 @@ impl GameTimer {
 fn update_game_status(
     mut games: ResMut<HashMap<ChannelId, Game>>,
     mut ev_deactivate: EventReader<DeactivateEvent>,
-    active_players: Query<(&ChannelId,), (With<Player>, With<Active>)>,
-    active_enemies: Query<(&ChannelId,), (With<Enemy>, With<Active>)>,
-    entities: Query<(&ChannelId,), (Or<(With<Enemy>, With<Player>)>,)>,
+    mut ev_game_draw: EventWriter<GameDrawEvent>,
+    active_players: Query<(Entity, &ChannelId,), (With<Player>, With<Active>)>,
+    active_enemies: Query<(Entity, &ChannelId,), (With<Enemy>, With<Active>)>,
+    entities: Query<(Entity, &ChannelId), (Or<(With<Enemy>, With<Player>)>,)>,
 ) {
     let deactivated: HashSet<_> = ev_deactivate.iter()
         .filter_map(|ev| entities.get(ev.0).ok())
-        .map(|(channel_id,)| channel_id)
+        .map(|(entity, _)| entity)
         .collect();
 
     for (channel_id, game) in games.iter_mut().filter(|(_, game)| game.status == GameStatus::Ongoing) {
-        let initialized = entities.iter().any(|(enemy_channel_id,)| enemy_channel_id.0 == channel_id.0);
+        let initialized = entities.iter().any(|(_, enemy_channel_id)| enemy_channel_id == channel_id);
         if !initialized {
             continue;
         }
-        if active_enemies.iter().all(|(enemy_channel_id,)|
-            enemy_channel_id != channel_id || deactivated.contains(enemy_channel_id)
+        if active_enemies.iter().all(|(entity, enemy_channel_id,)|
+            enemy_channel_id != channel_id || deactivated.contains(&entity)
         ) {
             game.status = GameStatus::Won;
-        } else if active_players.iter().all(|(player_channel_id,)|
-            player_channel_id != channel_id || deactivated.contains(player_channel_id)
+        } else if active_players.iter().all(|(entity, player_channel_id,)|
+            player_channel_id != channel_id || deactivated.contains(&entity)
         ) {
             game.status = GameStatus::Lost;
+        }
+        if game.status != GameStatus::Ongoing {
+            ev_game_draw.send(GameDrawEvent::new(*channel_id));
         }
     }
 
@@ -557,43 +569,44 @@ fn render(
                     .build()
                     .unwrap(),
             });
+            if game.status == GameStatus::Ongoing {
+                for (enemy_channel_id, parts, attack, stage) in enemies.iter() {
+                    if enemy_channel_id != channel_id {
+                        continue;
+                    }
+                    let loc = &game.localization;
+                    let status = format!("{}, {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
+                    let core = parts[BygonePart::Core].render_text(loc);
+                    let sensor = parts[BygonePart::Sensor].render_text(loc);
+                    let left_wing = parts[BygonePart::LeftWing].render_text(loc);
+                    let right_wing = parts[BygonePart::RightWing].render_text(loc);
+                    let gun = parts[BygonePart::Gun].render_text(loc);
 
-            for (enemy_channel_id, parts, attack, stage) in enemies.iter() {
-                if enemy_channel_id != channel_id || game.status != GameStatus::Ongoing {
-                    continue;
+                    message.embeds.enemies = Some(
+                        EmbedBuilder::new()
+                            .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
+                            .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
+                            .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
+                            .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
+                            .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
+                            .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
+                            .build()
+                            .unwrap()
+                    );
                 }
-                let loc = &game.localization;
-                let status = format!("{}, {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
-                let core = parts[BygonePart::Core].render_text(loc);
-                let sensor = parts[BygonePart::Sensor].render_text(loc);
-                let left_wing = parts[BygonePart::LeftWing].render_text(loc);
-                let right_wing = parts[BygonePart::RightWing].render_text(loc);
-                let gun = parts[BygonePart::Gun].render_text(loc);
 
-                message.embeds.enemies = Some(
-                    EmbedBuilder::new()
-                        .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
-                        .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
-                        .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
-                        .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
-                        .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
-                        .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
-                        .build()
-                        .unwrap()
-                );
-            }
-
-            let mut players_embed_builder = EmbedBuilder::new();
-            for (name, player_channel_id, vitality) in players.iter() {
-                if player_channel_id != channel_id {
-                    continue;
+                let mut players_embed_builder = EmbedBuilder::new();
+                for (name, player_channel_id, vitality) in players.iter() {
+                    if player_channel_id != channel_id {
+                        continue;
+                    }
+                    players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
+                        name,
+                        vitality.health().render_text(loc)
+                    ));
                 }
-                players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
-                    name,
-                    vitality.health().render_text(loc)
-                ));
+                message.embeds.players = Some(players_embed_builder.build().unwrap());
             }
-            message.embeds.players = Some(players_embed_builder.build().unwrap());
 
             if let Some(sender) = &*sender {
                 if let Ok(ref mut sender_lock) = sender.lock() {    

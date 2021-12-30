@@ -3,6 +3,7 @@ use phf::phf_ordered_map;
 use crate::{language::Language, components::BygonePart};
 
 pub fn is_game_starting(source: &str) -> Option<Language> {
+    let source = source.to_lowercase();
     if source.contains("битв") || source.contains("сраж") {
         Some(Language::Ru)
     } else if source.contains("battl") || source.contains("fight") {

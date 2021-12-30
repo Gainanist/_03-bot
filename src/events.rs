@@ -41,9 +41,6 @@ impl PlayerAttackEvent {
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PlayerBufferAttackEvent(pub PlayerAttackEvent);
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct EnemyAttackEvent {
     pub channel: ChannelId,
 }
@@ -113,5 +110,11 @@ impl PlayerJoinEvent {
 #[derive(Clone, Debug)]
 pub enum InputEvent {
     GameStart(GameStartEvent),
+    PlayerAttack(PlayerAttackEvent),
+}
+
+#[derive(Clone, Debug)]
+pub enum DelayedEvent {
+    GameDraw(GameDrawEvent),
     PlayerAttack(PlayerAttackEvent),
 }
