@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, collections::HashMap};
+use std::{ops::DerefMut, collections::{HashMap, VecDeque}, time::{Duration, Instant}};
 
 use bevy::{prelude::*};
 use enum_map::{enum_map, EnumMap};
@@ -65,7 +65,6 @@ impl PlayerBundle {
             _active: Active,
         }
     }
-
 }
 
 pub fn spawn_bygones(mut commands: Commands, mut ev_game_start: EventReader<GameStartEvent>) {
@@ -155,29 +154,54 @@ pub fn process_bygone_part_death(
 }
 
 pub fn damage_players(
-    mut ev_player_attack: EventReader<PlayerAttackEvent>,
+    mut ev_enemy_attack: EventReader<EnemyAttackEvent>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut dice: Local<bevy_rng::Rng>,
-    mut players: Query<(Entity, &mut Vitality), (With<Player>, With<Active>)>,
-    enemies: Query<&Attack, (With<Enemy>, With<Active>)>,
+    mut players: Query<(Entity, &ChannelId, &mut Vitality), (With<Player>, With<Active>)>,
+    enemies: Query<(&ChannelId, &Attack), (With<Enemy>, With<Active>)>,
 ) {
-    if ev_player_attack.iter().count() == 0 {
-        return;
-    }
+    for EnemyAttackEvent{ channel } in ev_enemy_attack.iter() {
+        let mut players: Vec<_> = players.iter_mut()
+            .filter(|(_, player_channel_id, _)| *player_channel_id == channel)
+            .map(|(entity, _, vitality)| (entity, vitality))
+            .collect();
+        let enemies = enemies.iter()
+            .filter(|(enemy_channel_id, _)| *enemy_channel_id == channel)
+            .map(|(_, attack)| attack);
 
-    let mut players: Vec<_> = players.iter_mut().collect();
-
-    for attack in enemies.iter() {
-        if let Some((entity, target)) = dice.choose_mut(&mut players) {
-            attack.attack(target.deref_mut(), dice.iroll(-50, 50));
-            if !target.health().alive() {
-                ev_deactivate.send(DeactivateEvent(*entity));
+        for attack in enemies {
+            if let Some((entity, target)) = dice.choose_mut(&mut players) {
+                attack.attack(target.deref_mut(), dice.iroll(-50, 50));
+                if !target.health().alive() {
+                    ev_deactivate.send(DeactivateEvent(*entity));
+                }
             }
         }
     }
 }
 
-pub fn deativate(
+pub fn buffer_player_attacks(
+    buffer_duration: Res<BufferPlayerAttackDuration>,
+    mut buffer: Local<VecDeque<(Instant, PlayerAttackEvent)>>,
+    mut ev_player_buffer_attack: EventReader<PlayerBufferAttackEvent>,
+    mut ev_player_attack: EventWriter<PlayerAttackEvent>,
+) {
+    let ready_count = buffer.iter()
+        .take_while(|(start, _)| start.elapsed() > buffer_duration.0)
+        .count();
+    for _ in 0..ready_count {
+        ev_player_attack.send(buffer.pop_front().unwrap().1);
+    }
+
+    for ev in ev_player_buffer_attack.iter() {
+        buffer.push_back((Instant::now(), ev.0.clone()));
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct BufferPlayerAttackDuration(pub Duration);
+
+pub fn deactivate(
     mut commands: Commands,
     mut ev_deactivate: EventReader<DeactivateEvent>,
 ) {
