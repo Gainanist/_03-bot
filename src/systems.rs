@@ -256,7 +256,6 @@ pub fn deactivate(
 pub fn update_game_status(
     mut games: ResMut<HashMap<ChannelId, Game>>,
     mut ev_deactivate: EventReader<DeactivateEvent>,
-    mut ev_game_draw: EventWriter<GameDrawEvent>,
     active_players: Query<(Entity, &ChannelId,), (With<Player>, With<Active>)>,
     active_enemies: Query<(Entity, &ChannelId,), (With<Enemy>, With<Active>)>,
     entities: Query<(Entity, &ChannelId), (Or<(With<Enemy>, With<Player>)>,)>,
@@ -279,9 +278,6 @@ pub fn update_game_status(
             player_channel_id != channel_id || deactivated.contains(&entity)
         ) {
             game.status = GameStatus::Lost;
-        }
-        if game.status != GameStatus::Ongoing {
-            ev_game_draw.send(GameDrawEvent::new(*channel_id));
         }
     }
 
