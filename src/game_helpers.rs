@@ -19,7 +19,7 @@ pub struct GameTimer {
 
 impl GameTimer {
     const TURN_DURATION: Duration = Duration::from_secs(5);
-    const ENEMY_ATTACK_DELAY: Duration = Duration::from_secs(2);
+    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(4500);
 
     pub fn new() -> Self {
         Self {

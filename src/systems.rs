@@ -5,7 +5,7 @@ use enum_map::EnumMap;
 use twilight_embed_builder::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
 use twilight_model::id::{ChannelId, UserId};
 
-use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
+use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
 
 pub fn listen(
     mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
@@ -104,12 +104,14 @@ pub fn turn_timer(
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
     mut ev_enemy_attack: EventWriter<EnemyAttackEvent>,
     mut ev_game_draw: EventWriter<GameDrawEvent>,
+    mut ev_turn_end: EventWriter<TurnEndEvent>,
 ) {
     for (channel_id, timer) in timers.iter_mut() {
         if timer.enemy_attack() {
             ev_enemy_attack.send(EnemyAttackEvent::new(*channel_id));
         }
         if timer.turn_end() {
+            ev_turn_end.send(TurnEndEvent::new(*channel_id));
             ev_game_draw.send(GameDrawEvent::new(*channel_id));
         }
     }
@@ -134,11 +136,12 @@ pub fn spawn_players(mut commands: Commands, mut ev_player_join: EventReader<Pla
 }
 
 pub fn damage_bygone(
+    mut commands: Commands,
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
     mut ev_part_death: EventWriter<BygonePartDeathEvent>,
     mut dice: Local<bevy_rng::Rng>,
     mut actors: QuerySet<(
-        Query<(&UserId, &ChannelId, &Attack), (With<Player>, With<Active>)>,
+        Query<(Entity, &UserId, &ChannelId, &Attack), (With<Player>, With<Active>, With<Ready>)>,
         Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>), (With<Enemy>, With<Active>)>,
     )>,
 ) {
@@ -147,14 +150,15 @@ pub fn damage_bygone(
         .collect();
     
     let attacks: HashMap<_, _> = actors.q0().iter()
-        .map(|(user_id, channel_id, attack)| (*channel_id, (*user_id, *attack)))
+        .filter(|(_, user_id, channel_id, _)| target_parts.contains_key(&(**user_id, **channel_id)))
+        .map(|(entity, user_id, channel_id, attack)| (*channel_id, (entity, *user_id, *attack)))
         .collect();
 
     for (bygone_entity,
         enemy_channel,
         mut body_parts,
     ) in actors.q1_mut().iter_mut() {
-        if let Some((user_id, attack)) = attacks.get(enemy_channel) {
+        if let Some((user_entity, user_id, attack)) = attacks.get(enemy_channel) {
             if let Some(part) = target_parts.get(&(*user_id, *enemy_channel)) {
                 if !body_parts[*part].health().alive() {
                     continue;
@@ -163,6 +167,7 @@ pub fn damage_bygone(
                 if !body_parts[*part].health().alive() {
                     ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
                 }
+                commands.entity(*user_entity).remove::<Ready>();
             }
 
         }
@@ -356,6 +361,20 @@ pub fn render(
                 if let Ok(ref mut sender_lock) = sender.lock() {    
                     sender_lock.send(message);
                 }
+            }
+        }
+    }
+}
+
+pub fn ready_players(
+    mut commands: Commands,
+    mut ev_turn_end: EventReader<TurnEndEvent>,
+    players: Query<(Entity, &ChannelId), (With<Player>, With<Active>, Without<Ready>)>,
+) {
+    for ev in ev_turn_end.iter() {
+        for (entity, channel_id) in players.iter() {
+            if *channel_id == ev.channel_id {
+                commands.entity(entity).insert(Ready);
             }
         }
     }

@@ -51,6 +51,7 @@ pub struct PlayerBundle {
     attack: Attack,
     _player: Player,
     _active: Active,
+    _ready: Ready,
 }
 
 impl PlayerBundle {
@@ -63,6 +64,7 @@ impl PlayerBundle {
             attack: Attack::new(1, 50),
             _player: Player,
             _active: Active,
+            _ready: Ready,
         }
     }
 }

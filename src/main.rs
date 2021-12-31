@@ -11,7 +11,6 @@ use std::{env, error::Error, sync::{Arc, Mutex}, time::{Duration}, collections::
 
 use command_parser::is_game_starting;
 
-
 use events::*;
 use futures::{stream::{StreamExt}};
 use game_helpers::{GameRenderMessage, get_games_filename, Game, EventDelay};
@@ -22,9 +21,6 @@ use crate::{command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
 
 use bevy::{prelude::*, app::ScheduleRunnerSettings};
 use bevy_rng::*;
-
-
-
 
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
@@ -158,6 +154,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_event::<GameStartEvent>()
         .add_event::<PlayerAttackEvent>()
         .add_event::<PlayerJoinEvent>()
+        .add_event::<TurnEndEvent>()
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_system(listen.system().config(|params| {
@@ -175,15 +172,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_system(render.system().config(|params| {
             params.0 = Some(Some(Mutex::new(output_sender)));
         }).label(render_label).after(update_label))
+        .add_system(ready_players.system())
         .add_system(cleanup.system().after(render_label))
         .add_system(save_games.system())
         .run();
 
     Ok(())
 }
-
-
-
 
 fn process_reaction(
     reaction: &Reaction,

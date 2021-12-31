@@ -90,6 +90,19 @@ impl GameDrawEvent {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TurnEndEvent {
+    pub channel_id: ChannelId,
+}
+
+impl TurnEndEvent {
+    pub fn new(channel_id: ChannelId) -> Self {
+        Self {
+            channel_id,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerJoinEvent {
     pub player: UserId,
