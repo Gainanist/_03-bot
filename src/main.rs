@@ -1,5 +1,5 @@
 mod components;
-mod bygone_03;
+mod bundles;
 mod localization;
 mod command_parser;
 mod dice;
@@ -14,10 +14,11 @@ use components::{Player, Active, Vitality, Enemy, BygonePart, Attack, Bygone03St
 use enum_map::{EnumMap, Enum};
 use events::*;
 use futures::{stream::{StreamExt}};
+use game_helpers::{GameRenderMessage, get_games_filename, Game, EventDelay};
 use localization::{Localizations, Localization, RenderText};
 use std::sync::mpsc::{self, Sender};
 
-use crate::{bygone_03::*, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME};
+use crate::{bundles::*, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
 
 use bevy::{prelude::*, app::ScheduleRunnerSettings};
 use bevy_rng::*;
@@ -28,11 +29,6 @@ use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
 use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId, UserId}, channel::{Reaction, ReactionType, embed::Embed}, user::CurrentUser};
-
-fn get_games_filename() -> PathBuf {
-    let dir = env::current_dir().unwrap();
-    dir.join("games.json")
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -187,67 +183,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 
-#[derive(Clone, Debug, Default)]
-struct GameEmbeds {
-    title: Option<Embed>,
-    enemies: Option<Embed>,
-    log: Option<Embed>,
-    players: Option<Embed>,
-}
 
-impl GameEmbeds {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn render(self) -> ArrayVec<Embed, 4> {
-        let mut embeds = ArrayVec::new();
-        if let Some(title) = self.title {
-            embeds.push(title);
-        }
-        if let Some(enemies) = self.enemies {
-            embeds.push(enemies);
-        }
-        if let Some(log) = self.log {
-            embeds.push(log);
-        }
-        if let Some(players) = self.players {
-            embeds.push(players);
-        }
-        embeds
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct GameId(pub u128);
-
-impl GameId {
-    pub fn from_current_time(salt: u128) -> Self {
-        let timestamp = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(dur) => dur.as_nanos(),
-            Err(err) => err.duration().as_nanos(),
-        };
-        Self(timestamp + salt)
-    }
-}
-
-
-#[derive(Clone, Debug)]
-struct GameRenderMessage {
-    channel_id: ChannelId,
-    game_id: GameId,
-    embeds: GameEmbeds,
-}
-
-impl GameRenderMessage {
-    fn new(channel_id: ChannelId, game_id: GameId) -> Self {
-        Self {
-            channel_id,
-            game_id,
-            embeds: GameEmbeds::new(),
-        }
-    }
-}
 
 fn process_reaction(
     reaction: &Reaction,
