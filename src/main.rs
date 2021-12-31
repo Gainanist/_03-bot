@@ -7,28 +7,28 @@ mod events;
 mod game_helpers;
 mod systems;
 
-use std::{env, error::Error, sync::{Arc, mpsc::Receiver, Mutex}, time::{Duration, SystemTime, Instant}, collections::{HashMap, HashSet}, fs, path::{PathBuf}};
-use arrayvec::ArrayVec;
+use std::{env, error::Error, sync::{Arc, Mutex}, time::{Duration}, collections::{HashMap, HashSet}, fs};
+
 use command_parser::is_game_starting;
-use components::{Player, Active, Vitality, Enemy, BygonePart, Attack, Bygone03Stage};
-use enum_map::{EnumMap, Enum};
+
+
 use events::*;
 use futures::{stream::{StreamExt}};
 use game_helpers::{GameRenderMessage, get_games_filename, Game, EventDelay};
-use localization::{Localizations, Localization, RenderText};
+use localization::{Localizations, Localization};
 use std::sync::mpsc::{self, Sender};
 
-use crate::{bundles::*, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
+use crate::{command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
 
 use bevy::{prelude::*, app::ScheduleRunnerSettings};
 use bevy_rng::*;
 
-use serde::{Deserialize, Serialize};
 
-use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
+
+
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
-use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId, UserId}, channel::{Reaction, ReactionType, embed::Embed}, user::CurrentUser};
+use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId}, channel::{Reaction, ReactionType}, user::CurrentUser};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
