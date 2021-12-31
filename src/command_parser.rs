@@ -1,6 +1,6 @@
 use phf::phf_ordered_map;
 
-use crate::{language::Language, components::BygonePart};
+use crate::{localization::Language, components::BygonePart};
 
 pub fn is_game_starting(source: &str) -> Option<Language> {
     let source = source.to_lowercase();

@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::language::Language;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Language {
+    Ru,
+    En,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Localization {
