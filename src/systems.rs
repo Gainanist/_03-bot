@@ -280,12 +280,12 @@ pub fn update_game_status(
             game.status = GameStatus::Lost;
         }
     }
-
 }
 
 pub fn render(
     sender: Local<Option<Mutex<Sender<GameRenderMessage>>>>,
     games: Res<HashMap<ChannelId, Game>>,
+    mut battle_logs: ResMut<HashMap<ChannelId, Vec<String>>>, 
     mut ev_game_draw: EventReader<GameDrawEvent>,
     players: Query<(&String, &ChannelId, &Vitality), (With<Player>,)>,
     enemies: Query<(&ChannelId, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
@@ -337,6 +337,15 @@ pub fn render(
                             .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
                             .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
                             .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
+                            .build()
+                            .unwrap()
+                    );
+                }
+
+                if let Some(logs) = battle_logs.remove(channel_id) {
+                    message.embeds.log = Some(
+                        EmbedBuilder::new()
+                            .field()
                             .build()
                             .unwrap()
                     );

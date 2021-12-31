@@ -120,6 +120,24 @@ impl PlayerJoinEvent {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct EventsPlugin;
+
+impl Plugin for EventsPlugin {
+    fn build(&self, app: &mut AppBuilder) {
+        app
+            .add_event::<BygonePartDeathEvent>()
+            .add_event::<DeactivateEvent>()
+            .add_event::<DelayedEvent>()
+            .add_event::<EnemyAttackEvent>()
+            .add_event::<GameDrawEvent>()
+            .add_event::<GameStartEvent>()
+            .add_event::<PlayerAttackEvent>()
+            .add_event::<PlayerJoinEvent>()
+            .add_event::<TurnEndEvent>();
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum InputEvent {
     GameStart(GameStartEvent),

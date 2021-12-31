@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::components::BygonePart;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Language {
     Ru,
     En,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Localization {
     pub attack: String,
 
@@ -25,8 +27,6 @@ pub struct Localization {
     pub core_burning: String,
     pub core_destroyed: String,
 
-    pub intro: String,
-    pub battle_decline: String,
     pub title: String,
     pub lost: String,
     pub won: String,
@@ -57,8 +57,6 @@ impl Localizations {
             core_burning: "ГОРИТ!".to_string(),
             core_destroyed: "УНИЧТОЖЕНО!".to_string(),
 
-            intro: "*Враг близко...*".to_string(),
-            battle_decline: "*Но никто не пришёл.*".to_string(),
             title: "УНИЧ... ТОЖИТЬ.".to_string(),
             lost: "*Так темно… Я что, умер? Здесь так спокойно.*".to_string(),
             won: "*Человек торжествует над машиной!*".to_string(),
@@ -80,8 +78,6 @@ impl Localizations {
             core_burning: "BURNING!".to_string(),
             core_destroyed: "DESTROYED!".to_string(),
 
-            intro: "*A new threat is approaching...*".to_string(),
-            battle_decline: "*But nobody came.*".to_string(),
             title: "A wild _03 appears!".to_string(),
             lost: "*This darkness… Am I… dead? It’s so peaceful.*".to_string(),
             won: "*Man triumphs over machine!*".to_string(),

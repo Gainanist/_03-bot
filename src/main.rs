@@ -11,7 +11,7 @@ use std::{env, error::Error, sync::{Arc, Mutex}, time::{Duration}, collections::
 
 use command_parser::is_game_starting;
 
-use events::*;
+use events::{EventsPlugin, InputEvent, GameStartEvent, PlayerAttackEvent};
 use futures::{stream::{StreamExt}};
 use game_helpers::{GameRenderMessage, get_games_filename, Game, EventDelay};
 use localization::{Localizations, Localization};
@@ -138,17 +138,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
         .insert_resource(EventDelay(Duration::from_millis(150)))
         .insert_resource(games)
-        .add_event::<BygonePartDeathEvent>()
-        .add_event::<DeactivateEvent>()
-        .add_event::<DelayedEvent>()
-        .add_event::<EnemyAttackEvent>()
-        .add_event::<GameDrawEvent>()
-        .add_event::<GameStartEvent>()
-        .add_event::<PlayerAttackEvent>()
-        .add_event::<PlayerJoinEvent>()
-        .add_event::<TurnEndEvent>()
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
+        .add_plugin(EventsPlugin::default())
         .add_system(listen.system().config(|params| {
             params.0 = Some(Some(Mutex::new(input_receiver)));
         }))
