@@ -134,14 +134,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         None => HashMap::new(),
     };
 
-    let listen_label = "listen";
-    let spawn_label = "spawn";
-    let damage_label = "damage";
-    let on_death_events_label = "on_death_events";
-    let deactivate_label = "deactivate";
-    let update_label = "update";
-    let render_label = "render";
-
     App::build()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
         .insert_resource(EventDelay(Duration::from_millis(150)))
@@ -159,21 +151,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_plugin(RngPlugin::default())
         .add_system(listen.system().config(|params| {
             params.0 = Some(Some(Mutex::new(input_receiver)));
-        }).label(listen_label))
+        }))
         .add_system(delay_events.system())
         .add_system(turn_timer.system())
-        .add_system(spawn_bygones.system().label(spawn_label).after(listen_label))
-        .add_system(spawn_players.system().label(spawn_label).after(listen_label))
-        .add_system(damage_bygone.system().label(damage_label).after(spawn_label))
-        .add_system(damage_players.system().label(damage_label).after(spawn_label))
-        .add_system(process_bygone_part_death.system().label(on_death_events_label).after(damage_label))
-        .add_system(deactivate.system().label(deactivate_label).after(on_death_events_label))
-        .add_system(update_game_status.system().label(update_label).after(deactivate_label))
+        .add_system(spawn_bygones.system())
+        .add_system(spawn_players.system())
+        .add_system(damage_bygone.system())
+        .add_system(damage_players.system())
+        .add_system(process_bygone_part_death.system())
+        .add_system(deactivate.system())
+        .add_system(update_game_status.system())
         .add_system(render.system().config(|params| {
             params.0 = Some(Some(Mutex::new(output_sender)));
-        }).label(render_label).after(update_label))
+        }))
         .add_system(ready_players.system())
-        .add_system(cleanup.system().after(render_label))
+        .add_system(cleanup.system())
         .add_system(save_games.system())
         .run();
 

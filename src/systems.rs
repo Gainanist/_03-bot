@@ -163,7 +163,9 @@ pub fn damage_bygone(
                 if !body_parts[*part].health().alive() {
                     continue;
                 }
-                attack.attack(&mut body_parts[*part], dice.iroll(-50, 50));
+                let dice_roll = dice.iroll(-50, 50);
+                println!("Attacking bygone part, dodge {}, acc {}, roll {}", body_parts[*part].dodge(), attack.accuracy(), dice_roll.0);
+                attack.attack(&mut body_parts[*part], dice_roll);
                 if !body_parts[*part].health().alive() {
                     ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
                 }

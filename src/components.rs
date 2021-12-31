@@ -80,7 +80,8 @@ impl Vitality {
 
     pub fn take_attack(&mut self, damage: usize, accuracy: isize) {
         if accuracy > self.dodge {
-            self.health.reduce(damage)
+            self.health.reduce(damage);
+            println!("Taking damage: {}, accuracy: {}, dodge: {}", damage, accuracy, self.dodge);
         }
     }
 }
@@ -107,6 +108,10 @@ impl Attack {
             damage,
             accuracy,
         }
+    }
+
+    pub fn accuracy(&self) -> isize {
+        self.accuracy
     }
 
     pub fn modify_accuracy(&mut self, modifier: isize) {
