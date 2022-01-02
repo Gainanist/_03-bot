@@ -10,7 +10,7 @@ pub enum Language {
     En,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Localization {
     pub attack: String,
 
