@@ -34,7 +34,7 @@ pub fn listen(
                 let should_start_new_game = match games.get(&ev.channel) {
                     Some(game) =>
                         game.status == GameStatus::Lost
-                        || game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60*20,
+                        || game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60,
                     None => true,
                 };
                 if should_start_new_game {
