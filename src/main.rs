@@ -154,7 +154,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_system(deactivate.system())
         .add_system(update_game_status.system())
         .add_system(render.system().config(|params| {
-            params.0 = Some(Some(Mutex::new(output_sender)));
+            params.1 = Some(Some(Mutex::new(output_sender)));
         }))
         .add_system(ready_players.system())
         .add_system(cleanup.system())

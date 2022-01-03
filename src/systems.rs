@@ -5,7 +5,7 @@ use enum_map::EnumMap;
 use twilight_embed_builder::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
 use twilight_model::id::{ChannelId, UserId};
 
-use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
+use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, BattleLogLine}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
 
 pub fn listen(
     mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
@@ -165,7 +165,9 @@ pub fn damage_bygone(
                 }
                 let dice_roll = dice.iroll(-50, 50);
                 println!("Attacking bygone part, dodge {}, acc {}, roll {}", body_parts[*part].dodge(), attack.accuracy(), dice_roll.0);
-                attack.attack(&mut body_parts[*part], dice_roll);
+                if attack.attack(&mut body_parts[*part], dice_roll) {
+                    commands.spawn_bundle
+                }
                 if !body_parts[*part].health().alive() {
                     ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
                 }
@@ -283,11 +285,13 @@ pub fn update_game_status(
 }
 
 pub fn render(
+    mut commands: Commands,
     sender: Local<Option<Mutex<Sender<GameRenderMessage>>>>,
     games: Res<HashMap<ChannelId, Game>>,
     mut ev_game_draw: EventReader<GameDrawEvent>,
     players: Query<(&String, &ChannelId, &Vitality), (With<Player>,)>,
     enemies: Query<(&ChannelId, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
+    battle_log: Query<(Entity, &ChannelId, &BattleLogLine)>,
 ) {
     for GameDrawEvent{ channel_id } in ev_game_draw.iter() {
         if let Some(game) = games.get(channel_id) {
@@ -340,6 +344,22 @@ pub fn render(
                             .unwrap()
                     );
                 }
+
+                let mut battle_log_contents = ">>> ".to_string();
+                for (log_entity, log_channel_id, battle_log_line) in battle_log.iter() {
+                    if log_channel_id != channel_id {
+                        continue;
+                    }
+                    battle_log_contents.push_str(" • ");
+                    battle_log_contents.push_str(&battle_log_line.0);
+                    battle_log_contents.push('\n');
+                    commands.entity(log_entity).despawn();
+                }
+                message.embeds.log = Some(EmbedBuilder::new()
+                    .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
+                    .build()
+                    .unwrap()
+                );
 
                 let mut players_embed_builder = EmbedBuilder::new();
                 for (name, player_channel_id, vitality) in players.iter() {

@@ -78,11 +78,13 @@ impl Vitality {
         self.dodge += modifier
     }
 
-    pub fn take_attack(&mut self, damage: usize, accuracy: isize) {
+    pub fn take_attack(&mut self, damage: usize, accuracy: isize) -> bool {
         if accuracy > self.dodge {
             self.health.reduce(damage);
             println!("Taking damage: {}, accuracy: {}, dodge: {}", damage, accuracy, self.dodge);
+            true
         }
+        false
     }
 }
 
@@ -118,7 +120,7 @@ impl Attack {
         self.accuracy += modifier
     }
 
-    pub fn attack(&self, target: &mut Vitality, dice_roll: IDiceRoll) {
+    pub fn attack(&self, target: &mut Vitality, dice_roll: IDiceRoll) -> bool {
         target.take_attack(self.damage, self.accuracy + dice_roll.0)
     }
 }
@@ -171,6 +173,9 @@ impl RenderText for Bygone03Stage {
         }.clone()
     }
 }
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct BattleLogLine(pub String);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Enemy;
