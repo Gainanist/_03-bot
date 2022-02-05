@@ -15,15 +15,15 @@ pub struct LocalizedLine(pub String);
 
 impl LocalizedLine {
     pub fn insert_player_name(&self, name: &PlayerName) -> Self {
-        LocalizedLine(self.0.replace("**{PLAYER_NAME}**", &name.0))
+        LocalizedLine(self.0.replace("{PLAYER_NAME}", &name.0))
     }
 
     pub fn insert_enemy_name(&self, name: &str) -> Self {
-        LocalizedLine(self.0.replace("**{ENEMY_NAME}**", name))
+        LocalizedLine(self.0.replace("{ENEMY_NAME}", name))
     }
 
     pub fn insert_bygone_part_name(&self, name: &str) -> Self {
-        LocalizedLine(self.0.replace("**{BYGONE03_PART_NAME}**", name))
+        LocalizedLine(self.0.replace("{BYGONE03_PART_NAME}", name))
     }
 }
 
@@ -100,41 +100,41 @@ impl Localizations {
             left_wing: LocalizedLine("левое крыло".to_string()),
             right_wing: LocalizedLine("правое крыло".to_string()),
 
-            core_armored: LocalizedLine("**защищено бронёй**".to_string()),
-            core_exposed: LocalizedLine("**открыто!**".to_string()),
-            core_burning: LocalizedLine("**ГОРИТ!**".to_string()),
-            core_destroyed: LocalizedLine("**УНИЧТОЖЕНО!**".to_string()),
+            core_armored: LocalizedLine("*защищено бронёй*".to_string()),
+            core_exposed: LocalizedLine("*открыто!*".to_string()),
+            core_burning: LocalizedLine("*ГОРИТ!*".to_string()),
+            core_destroyed: LocalizedLine("*УНИЧТОЖЕНО!*".to_string()),
 
             log_title: LocalizedLine("Лог битвы".to_string()),
             player_join: vec![
-                LocalizedLine("**{PLAYER_NAME}** рвётся в бой".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** смастерил(а) себе рогатку".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** всего лишь пытался(ась) выйти из Ройса".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* рвётся в бой".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* смастерил(а) себе рогатку".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* всего лишь пытался(ась) выйти из Ройса".to_string()),
             ],
             player_miss: vec![
-                LocalizedLine("**{PLAYER_NAME}** промахивается".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** использует стиль пьяного мастера".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** отвлекается на силуэт в окне".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* промахивается".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* использует стиль пьяного мастера".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* отвлекается на силуэт в окне".to_string()),
             ],
             player_hit: vec![
-                LocalizedLine("**{PLAYER_NAME}** попадает в **{BYGONE03_PART_NAME}**".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** крушит **{BYGONE03_PART_NAME}** из своей маленькой катапульты".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** подбивает **{BYGONE03_PART_NAME}**".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* попадает в *{BYGONE03_PART_NAME}*".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* крушит *{BYGONE03_PART_NAME}* из своей маленькой катапульты".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* подбивает *{BYGONE03_PART_NAME}*".to_string()),
             ],
             player_dead: vec![
-                LocalizedLine("**{PLAYER_NAME}** отправляется в отключку".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** идёт решать диалоговый паззл".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** получает разрыв попы массивными резиновыми шарами".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* отправляется в отключку".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* идёт решать диалоговый паззл".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* получает разрыв попы массивными резиновыми шарами".to_string()),
             ],
             bygone03_miss: vec![
-                LocalizedLine("**{ENEMY_NAME}** промахивается".to_string()),
-                LocalizedLine("У **{ENEMY_NAME}** в глазах двоится".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** вспоминает молодость".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* промахивается".to_string()),
+                LocalizedLine("У *{ENEMY_NAME}* в глазах двоится".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* вспоминает молодость".to_string()),
             ],
             bygone03_hit: vec![
-                LocalizedLine("**{ENEMY_NAME}** попадает в **{PLAYER_NAME}**".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** ласкает грудь резиновыми пулями, а **{PLAYER_NAME}** и не против".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** предлагает бесплатный массаж, **{PLAYER_NAME}** спешит записаться".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* попадает в *{PLAYER_NAME}*".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* ласкает грудь резиновыми пулями, а *{PLAYER_NAME}* и не против".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* предлагает бесплатный массаж, *{PLAYER_NAME}* спешит записаться".to_string()),
             ],
             bygone03_dead: vec![
                 LocalizedLine("Человек торжествует над машиной!".to_string()),
@@ -161,41 +161,41 @@ impl Localizations {
             left_wing: LocalizedLine("left wing".to_string()),
             right_wing: LocalizedLine("right wing".to_string()),
 
-            core_armored: LocalizedLine("armored".to_string()),
-            core_exposed: LocalizedLine("exposed!".to_string()),
-            core_burning: LocalizedLine("BURNING!".to_string()),
-            core_destroyed: LocalizedLine("DESTROYED!".to_string()),
+            core_armored: LocalizedLine("*armored*".to_string()),
+            core_exposed: LocalizedLine("*exposed!*".to_string()),
+            core_burning: LocalizedLine("*BURNING!*".to_string()),
+            core_destroyed: LocalizedLine("*DESTROYED!*".to_string()),
 
             log_title: LocalizedLine("Battle log".to_string()),
             player_join: vec![
-                LocalizedLine("**{PLAYER_NAME}** joins the fray".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** have made themselves a slingshot".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** was just trying to leave Royce".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* joins the fray".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* have made themselves a slingshot".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* was just trying to leave Royce".to_string()),
             ],
             player_miss: vec![
-                LocalizedLine("**{PLAYER_NAME}** misses".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** fights with a drunken style".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** gets distracted by a silhouette in the window".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* misses".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* fights with a drunken style".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* gets distracted by a silhouette in the window".to_string()),
             ],
             player_hit: vec![
-                LocalizedLine("**{PLAYER_NAME}** hits the **{BYGONE03_PART_NAME}**".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** smashes the **{BYGONE03_PART_NAME}** using their small catapult".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** damages the **{BYGONE03_PART_NAME}**".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* hits the *{BYGONE03_PART_NAME}*".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* smashes the *{BYGONE03_PART_NAME}* using their small catapult".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* damages the *{BYGONE03_PART_NAME}*".to_string()),
             ],
             player_dead: vec![
-                LocalizedLine("**{PLAYER_NAME}** is knocked out".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** proceeds to solve the dialogue puzzle".to_string()),
-                LocalizedLine("**{PLAYER_NAME}** gets their tushy ruined by the massive rubber balls".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* is knocked out".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* proceeds to solve the dialogue puzzle".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* gets their tushy ruined by the massive rubber balls".to_string()),
             ],
             bygone03_miss: vec![
-                LocalizedLine("**{ENEMY_NAME}** misses".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** is seeing double".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** is reminiscing the old days".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* misses".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* is seeing double".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* is reminiscing the old days".to_string()),
             ],
             bygone03_hit: vec![
-                LocalizedLine("**{ENEMY_NAME}** hits **{PLAYER_NAME}**".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** gently punches **{PLAYER_NAME}** in the chest with a rubber bullet".to_string()),
-                LocalizedLine("**{ENEMY_NAME}** offers **{PLAYER_NAME}** a free massage".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* hits *{PLAYER_NAME}*".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* gently punches *{PLAYER_NAME}* in the chest with a rubber bullet".to_string()),
+                LocalizedLine("*{ENEMY_NAME}* offers *{PLAYER_NAME}* a free massage".to_string()),
             ],
             bygone03_dead: vec![
                 LocalizedLine("Man triumphs over machine!".to_string()),

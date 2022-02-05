@@ -242,7 +242,7 @@ pub fn damage_players(
 
         for (channel_id, attack) in enemies {
             if let Some((entity, name, target)) = dice.choose_mut(&mut players) {
-                if attack.attack(target.deref_mut(), dice.iroll(-50, 50)) {
+                if attack.attack(target.deref_mut(), dice.iroll(-49, 51)) {
                     ev_battle_log.send((*channel_id, BattleLogEvent::BygoneHit(name.clone())));
                     if !target.health().alive() {
                         ev_deactivate.send(DeactivateEvent(*entity));
@@ -393,7 +393,7 @@ pub fn render(
                         continue;
                     }
                     let loc = &game.localization;
-                    let status = format!("{}, {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
+                    let status = format!(" • {}\n • {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
                     let core = parts[BygonePart::Core].render_text(loc);
                     let sensor = parts[BygonePart::Sensor].render_text(loc);
                     let left_wing = parts[BygonePart::LeftWing].render_text(loc);

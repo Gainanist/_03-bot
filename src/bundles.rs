@@ -28,10 +28,10 @@ impl Bygone03Bundle {
     ) -> Self {
         let parts = enum_map! {
             BygonePart::Core => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 80),
-            BygonePart::Sensor => Vitality::new((rng.gen_range(min_parts_health..=max_parts_health)), 70),
-            BygonePart::Gun => Vitality::new((rng.gen_range(min_parts_health..=max_parts_health)), 50),
-            BygonePart::LeftWing => Vitality::new((rng.gen_range(min_parts_health..=max_parts_health)), 30),
-            BygonePart::RightWing => Vitality::new((rng.gen_range(min_parts_health..=max_parts_health)), 30),
+            BygonePart::Sensor => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 70),
+            BygonePart::Gun => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 50),
+            BygonePart::LeftWing => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 30),
+            BygonePart::RightWing => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 30),
         };
         let attack = Attack::new(rng.gen_range(min_attack..=max_attack), 100);
     
