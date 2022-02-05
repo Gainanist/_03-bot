@@ -5,7 +5,7 @@ use enum_map::EnumMap;
 use twilight_embed_builder::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
 use twilight_model::id::{ChannelId, UserId};
 
-use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, BattleLogLine}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
+use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, PlayerName}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
 
 pub fn listen(
     mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
@@ -123,9 +123,9 @@ pub fn turn_timer(
     }
 }
 
-pub fn spawn_bygones(mut commands: Commands, mut ev_game_start: EventReader<GameStartEvent>) {
+pub fn spawn_bygones(mut commands: Commands, mut dice: Local<bevy_rng::Rng>, mut ev_game_start: EventReader<GameStartEvent>) {
     for ev in ev_game_start.iter() {
-        commands.spawn_bundle(Bygone03Bundle::with_normal_health(ev.channel));
+        commands.spawn_bundle(Bygone03Bundle::with_normal_health(ev.channel, &mut dice));
     }
 }
 
@@ -139,9 +139,10 @@ pub fn damage_bygone(
     mut commands: Commands,
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
     mut ev_part_death: EventWriter<BygonePartDeathEvent>,
+    mut ev_battle_log: EventWriter<(ChannelId, BattleLogEvent)>,
     mut dice: Local<bevy_rng::Rng>,
     mut actors: QuerySet<(
-        Query<(Entity, &UserId, &ChannelId, &Attack), (With<Player>, With<Active>, With<Ready>)>,
+        Query<(Entity, &UserId, &PlayerName, &ChannelId, &Attack), (With<Player>, With<Active>, With<Ready>)>,
         Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>), (With<Enemy>, With<Active>)>,
     )>,
 ) {
@@ -150,15 +151,15 @@ pub fn damage_bygone(
         .collect();
     
     let attacks: HashMap<_, _> = actors.q0().iter()
-        .filter(|(_, user_id, channel_id, _)| target_parts.contains_key(&(**user_id, **channel_id)))
-        .map(|(entity, user_id, channel_id, attack)| (*channel_id, (entity, *user_id, *attack)))
+        .filter(|(_, user_id, _, channel_id, _)| target_parts.contains_key(&(**user_id, **channel_id)))
+        .map(|(entity, user_id, user_name, channel_id, attack)| (*channel_id, (entity, *user_id, user_name.clone(), *attack)))
         .collect();
 
     for (bygone_entity,
         enemy_channel,
         mut body_parts,
     ) in actors.q1_mut().iter_mut() {
-        if let Some((user_entity, user_id, attack)) = attacks.get(enemy_channel) {
+        if let Some((user_entity, user_id, user_name, attack)) = attacks.get(enemy_channel) {
             if let Some(part) = target_parts.get(&(*user_id, *enemy_channel)) {
                 if !body_parts[*part].health().alive() {
                     continue;
@@ -166,10 +167,12 @@ pub fn damage_bygone(
                 let dice_roll = dice.iroll(-50, 50);
                 println!("Attacking bygone part, dodge {}, acc {}, roll {}", body_parts[*part].dodge(), attack.accuracy(), dice_roll.0);
                 if attack.attack(&mut body_parts[*part], dice_roll) {
-                    commands.spawn_bundle
-                }
-                if !body_parts[*part].health().alive() {
-                    ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
+                    ev_battle_log.send((*enemy_channel, BattleLogEvent::PlayerHit(user_name.clone(), *part)));
+                    if !body_parts[*part].health().alive() {
+                        ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
+                    }
+                } else {
+                    ev_battle_log.send((*enemy_channel, BattleLogEvent::PlayerMiss(user_name.clone())));
                 }
                 commands.entity(*user_entity).remove::<Ready>();
             }
@@ -180,12 +183,13 @@ pub fn damage_bygone(
 
 pub fn process_bygone_part_death(
     mut ev_part_death: EventReader<BygonePartDeathEvent>,
+    mut ev_battle_log: EventWriter<(ChannelId, BattleLogEvent)>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut bygones: Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
 ) {
     for BygonePartDeathEvent { entity, part } in ev_part_death.iter() {
         for (bygone_entity,
-            _channel,
+            channel,
             ref mut parts,
             ref mut attack,
             ref mut stage
@@ -198,6 +202,7 @@ pub fn process_bygone_part_death(
                     **stage = stage.next();
                     if stage.terminal() {
                         ev_deactivate.send(DeactivateEvent(bygone_entity));
+                        ev_battle_log.send((*channel, BattleLogEvent::BygoneDead));
                     } else {
                         let core_max_health = parts[BygonePart::Core].health().max();
                         let core_dodge = parts[BygonePart::Core].dodge();
@@ -221,25 +226,30 @@ pub fn process_bygone_part_death(
 
 pub fn damage_players(
     mut ev_enemy_attack: EventReader<EnemyAttackEvent>,
+    mut ev_battle_log: EventWriter<(ChannelId, BattleLogEvent)>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut dice: Local<bevy_rng::Rng>,
-    mut players: Query<(Entity, &ChannelId, &mut Vitality), (With<Player>, With<Active>)>,
+    mut players: Query<(Entity, &ChannelId, &PlayerName, &mut Vitality), (With<Player>, With<Active>)>,
     enemies: Query<(&ChannelId, &Attack), (With<Enemy>, With<Active>)>,
 ) {
     for EnemyAttackEvent{ channel } in ev_enemy_attack.iter() {
         let mut players: Vec<_> = players.iter_mut()
-            .filter(|(_, player_channel_id, _)| *player_channel_id == channel)
-            .map(|(entity, _, vitality)| (entity, vitality))
+            .filter(|(_, player_channel_id, _, _)| *player_channel_id == channel)
+            .map(|(entity, _, name, vitality)| (entity, name, vitality))
             .collect();
         let enemies = enemies.iter()
-            .filter(|(enemy_channel_id, _)| *enemy_channel_id == channel)
-            .map(|(_, attack)| attack);
+            .filter(|(enemy_channel_id, _)| *enemy_channel_id == channel);
 
-        for attack in enemies {
-            if let Some((entity, target)) = dice.choose_mut(&mut players) {
-                attack.attack(target.deref_mut(), dice.iroll(-50, 50));
-                if !target.health().alive() {
-                    ev_deactivate.send(DeactivateEvent(*entity));
+        for (channel_id, attack) in enemies {
+            if let Some((entity, name, target)) = dice.choose_mut(&mut players) {
+                if attack.attack(target.deref_mut(), dice.iroll(-50, 50)) {
+                    ev_battle_log.send((*channel_id, BattleLogEvent::BygoneHit(name.clone())));
+                    if !target.health().alive() {
+                        ev_deactivate.send(DeactivateEvent(*entity));
+                        ev_battle_log.send((*channel_id, BattleLogEvent::PlayerDead(name.clone())));
+                    }
+                } else {
+                    ev_battle_log.send((*channel_id, BattleLogEvent::BygoneMiss));
                 }
             }
         }
@@ -284,14 +294,72 @@ pub fn update_game_status(
     }
 }
 
+pub fn log_battle(
+    games: Res<HashMap<ChannelId, Game>>,
+    mut battle_log: ResMut<HashMap<ChannelId, Vec<String>>>,
+    mut dice: Local<bevy_rng::Rng>,
+    mut ev_battle_log: EventReader<(ChannelId, BattleLogEvent)>,
+    mut ev_player_join: EventReader<PlayerJoinEvent>,
+) {
+    for (channel_id, ev) in ev_battle_log.iter() {
+        if let Some(game) = games.get(channel_id) {
+            let loc = &game.localization;
+            let log_line = match ev {
+                BattleLogEvent::PlayerDead(name) => dice
+                    .choose(&loc.player_dead)
+                    .unwrap()
+                    .insert_player_name(name),
+                BattleLogEvent::PlayerHit(name, part) => dice
+                    .choose(&loc.player_hit)
+                    .unwrap()
+                    .insert_player_name(name)
+                    .insert_bygone_part_name(&part.render_text(loc)),
+                BattleLogEvent::PlayerMiss(name) => dice
+                    .choose(&loc.player_miss)
+                    .unwrap()
+                    .insert_player_name(name),
+                BattleLogEvent::BygoneHit(name) => dice
+                    .choose(&loc.bygone03_hit)
+                    .unwrap()
+                    .insert_player_name(name)
+                    .insert_enemy_name("_03"),
+                BattleLogEvent::BygoneMiss => dice
+                    .choose(&loc.bygone03_miss)
+                    .unwrap()
+                    .insert_enemy_name("_03"),
+                BattleLogEvent::BygoneDead => dice
+                    .choose(&loc.bygone03_dead)
+                    .unwrap()
+                    .insert_enemy_name("_03"),
+            };
+            battle_log
+                .entry(*channel_id)
+                .or_insert(Vec::new())
+                .push(log_line.0);
+        }
+    }
+    for ev in ev_player_join.iter() {
+        if let Some(game) = games.get(&ev.channel) {
+            let loc = &game.localization;
+            let log_line = dice
+                .choose(&loc.player_join)
+                .unwrap()
+                .insert_player_name(&ev.player_name);
+            battle_log
+                .entry(ev.channel)
+                .or_insert(Vec::new())
+                .push(log_line.0);
+        }
+    }
+}
+
 pub fn render(
-    mut commands: Commands,
     sender: Local<Option<Mutex<Sender<GameRenderMessage>>>>,
     games: Res<HashMap<ChannelId, Game>>,
+    mut battle_log: ResMut<HashMap<ChannelId, Vec<String>>>,
     mut ev_game_draw: EventReader<GameDrawEvent>,
-    players: Query<(&String, &ChannelId, &Vitality), (With<Player>,)>,
+    players: Query<(&PlayerName, &ChannelId, &Vitality), (With<Player>,)>,
     enemies: Query<(&ChannelId, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
-    battle_log: Query<(Entity, &ChannelId, &BattleLogLine)>,
 ) {
     for GameDrawEvent{ channel_id } in ev_game_draw.iter() {
         if let Some(game) = games.get(channel_id) {
@@ -345,21 +413,14 @@ pub fn render(
                     );
                 }
 
-                let mut battle_log_contents = ">>> ".to_string();
-                for (log_entity, log_channel_id, battle_log_line) in battle_log.iter() {
-                    if log_channel_id != channel_id {
-                        continue;
-                    }
-                    battle_log_contents.push_str(" • ");
-                    battle_log_contents.push_str(&battle_log_line.0);
-                    battle_log_contents.push('\n');
-                    commands.entity(log_entity).despawn();
+                if let Some(battle_log_lines) = battle_log.remove(channel_id) {
+                    let battle_log_contents = " • ".to_string() + &battle_log_lines.join("\n • ");
+                    message.embeds.log = Some(EmbedBuilder::new()
+                        .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
+                        .build()
+                        .unwrap()
+                    );
                 }
-                message.embeds.log = Some(EmbedBuilder::new()
-                    .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
-                    .build()
-                    .unwrap()
-                );
 
                 let mut players_embed_builder = EmbedBuilder::new();
                 for (name, player_channel_id, vitality) in players.iter() {
@@ -367,11 +428,14 @@ pub fn render(
                         continue;
                     }
                     players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
-                        name,
+                        &name.0,
                         vitality.health().render_text(loc)
                     ));
                 }
-                message.embeds.players = Some(players_embed_builder.build().unwrap());
+                let players_embed = players_embed_builder.build().unwrap();
+                if players_embed.fields.len() > 0 {
+                    message.embeds.players = Some(players_embed);
+                }
             }
 
             if let Some(sender) = &*sender {

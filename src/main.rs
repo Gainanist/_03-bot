@@ -11,6 +11,7 @@ use std::{env, error::Error, sync::{Arc, Mutex}, time::{Duration}, collections::
 
 use command_parser::is_game_starting;
 
+use components::PlayerName;
 use events::{EventsPlugin, InputEvent, GameStartEvent, PlayerAttackEvent};
 use futures::{stream::{StreamExt}};
 use game_helpers::{GameRenderMessage, get_games_filename, Game, EventDelay};
@@ -69,6 +70,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         while let Some((shard_id, event)) = events.next().await {
             match event {
                 Event::MessageCreate(msg) => {
+                    println!("Received MessageCreate event from channel {}", msg.channel_id);
+
                     if msg.author.id != me_input.id {
                         if let Some(language) = is_game_starting(&msg.content) {
                             let localization = localizations.get(language).clone();
@@ -76,18 +79,26 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         }
                     }
                 },
-                Event::ReactionAdd(reaction) => process_reaction(
-                    &reaction.0,
-                    &input_sender,
-                    &me_input,
-                    &game_message_ids_input
-                ),
-                Event::ReactionRemove(reaction) => process_reaction(
-                    &reaction.0,
-                    &input_sender,
-                    &me_input,
-                    &game_message_ids_input
-                ),
+                Event::ReactionAdd(reaction) => {
+                    println!("Received ReactionAdd event from channel {}", reaction.channel_id);
+
+                    process_reaction(
+                        &reaction.0,
+                        &input_sender,
+                        &me_input,
+                        &game_message_ids_input
+                    )
+                },
+                Event::ReactionRemove(reaction) => {
+                    println!("Received ReactionRemove event from channel {}", reaction.channel_id);
+
+                    process_reaction(
+                        &reaction.0,
+                        &input_sender,
+                        &me_input,
+                        &game_message_ids_input
+                    )
+                },
                 Event::ShardConnected(_) => {
                     println!("Connected on shard {}", shard_id);
                 }
@@ -107,11 +118,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             if let Ok(msg) = msg {
                 let game_id = msg.game_id;
                 let message_id = message_ids.get(&game_id);
-                if let Ok(message_id) = send_game_message(&http_write, message_id, msg).await {
-                    message_ids.insert(game_id, message_id);
-                    if let Ok(mut game_message_ids_output_lock) = game_message_ids_output.lock() {
-                        game_message_ids_output_lock.insert(message_id);
-                    }
+                let channel_id = msg.channel_id;
+                match send_game_message(&http_write, message_id, msg).await {
+                    Ok(message_id) => {
+                        println!("Successfully sent/updated a game message in channel {}", channel_id);
+                        message_ids.insert(game_id, message_id);
+                        if let Ok(mut game_message_ids_output_lock) = game_message_ids_output.lock() {
+                            game_message_ids_output_lock.insert(message_id);
+                        }
+                    },
+                    Err(err) => {
+                        println!("Error sending/updating a game message in channel {}: {}", channel_id, err);
+                    },
                 }
             }
         }
@@ -134,10 +152,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         None => HashMap::new(),
     };
 
+    let render_label = "render";
+
     App::build()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
         .insert_resource(EventDelay(Duration::from_millis(150)))
         .insert_resource(games)
+        .insert_resource(HashMap::<ChannelId, Vec<String>>::new())
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_plugin(EventsPlugin::default())
@@ -153,9 +174,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_system(process_bygone_part_death.system())
         .add_system(deactivate.system())
         .add_system(update_game_status.system())
+        .add_system(log_battle.system().before(render_label))
         .add_system(render.system().config(|params| {
-            params.1 = Some(Some(Mutex::new(output_sender)));
-        }))
+            params.0 = Some(Some(Mutex::new(output_sender)));
+        }).label(render_label))
         .add_system(ready_players.system())
         .add_system(cleanup.system())
         .add_system(save_games.system())
@@ -183,13 +205,13 @@ fn process_reaction(
 
     if let ReactionType::Unicode { name } = &reaction.emoji {
         if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
-            let user_name = match &reaction.member {
+            let user_name = PlayerName(match &reaction.member {
                 Some(member) => match &member.nick {
                     Some(nick) => nick,
                     None => &member.user.name,
                 },
                 None => "Anon",
-            }.to_string();
+            }.to_string());
 
             sender.send(InputEvent::PlayerAttack(
                 PlayerAttackEvent::new(
@@ -204,13 +226,13 @@ fn process_reaction(
 }
 
 fn start_game(sender: &Sender<InputEvent>, localization: Localization, msg: &MessageCreate) {
-    let initial_player_name = match &msg.member {
+    let initial_player_name = PlayerName(match &msg.member {
         Some(member) => match &member.nick {
             Some(nick) => nick,
             None => &msg.author.name,
         },
         None => &msg.author.name,
-    }.to_string();
+    }.to_string());
     sender.send(
         InputEvent::GameStart(GameStartEvent::new(
             msg.author.id,

@@ -1,3 +1,4 @@
+use bevy::ecs::system::ResMutState;
 use enum_map::Enum;
 
 use crate::{dice::IDiceRoll, localization::{Localization, RenderText}};
@@ -82,7 +83,7 @@ impl Vitality {
         if accuracy > self.dodge {
             self.health.reduce(damage);
             println!("Taking damage: {}, accuracy: {}, dodge: {}", damage, accuracy, self.dodge);
-            true
+            return true;
         }
         false
     }
@@ -140,6 +141,18 @@ pub enum BygonePart {
     RightWing,
 }
 
+impl RenderText for BygonePart {
+    fn render_text(&self, localization: &Localization) -> String {
+        match self {
+            BygonePart::Core => &localization.core.0,
+            BygonePart::Sensor => &localization.sensor.0,
+            BygonePart::Gun => &localization.gun.0,
+            BygonePart::LeftWing => &localization.left_wing.0,
+            BygonePart::RightWing => &localization.right_wing.0,
+        }.clone()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Bygone03Stage {
     Armored,
@@ -166,16 +179,13 @@ impl Bygone03Stage {
 impl RenderText for Bygone03Stage {
     fn render_text(&self, localization: &Localization) -> String {
         match *self {
-            Self::Armored => &localization.core_armored,
-            Self::Exposed => &localization.core_exposed,
-            Self::Burning => &localization.core_burning,
-            Self::Defeated => &localization.core_destroyed,
+            Self::Armored => &localization.core_armored.0,
+            Self::Exposed => &localization.core_exposed.0,
+            Self::Burning => &localization.core_burning.0,
+            Self::Defeated => &localization.core_destroyed.0,
         }.clone()
     }
 }
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct BattleLogLine(pub String);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Enemy;
@@ -189,3 +199,5 @@ pub struct Active;
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ready;
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PlayerName(pub String);

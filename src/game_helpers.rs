@@ -1,4 +1,4 @@
-use std::{time::{Duration, Instant, SystemTime}, path::PathBuf, env};
+use std::{time::{Duration, Instant, SystemTime}, path::PathBuf, env, ops::Sub};
 
 use arrayvec::ArrayVec;
 use enum_map::Enum;
@@ -18,8 +18,8 @@ pub struct GameTimer {
 }
 
 impl GameTimer {
-    const TURN_DURATION: Duration = Duration::from_secs(5);
-    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(4500);
+    const TURN_DURATION: Duration = Duration::from_secs(10);
+    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(9500);
 
     pub fn new() -> Self {
         Self {

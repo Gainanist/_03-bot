@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use twilight_model::id::{UserId, ChannelId};
 
-use crate::{components::BygonePart, localization::Localization};
+use crate::{components::{BygonePart, PlayerName}, localization::Localization};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DeactivateEvent(pub Entity);
@@ -24,13 +24,13 @@ impl BygonePartDeathEvent {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerAttackEvent {
     pub player: UserId,
-    pub player_name: String,
+    pub player_name: PlayerName,
     pub channel: ChannelId,
     pub target: BygonePart,
 }
 
 impl PlayerAttackEvent {
-    pub fn new(player: UserId, player_name: String, channel: ChannelId, target: BygonePart) -> Self {
+    pub fn new(player: UserId, player_name: PlayerName, channel: ChannelId, target: BygonePart) -> Self {
         Self {
             player,
             player_name,
@@ -56,7 +56,7 @@ impl EnemyAttackEvent {
 #[derive(Clone, Debug)]
 pub struct GameStartEvent {
     pub initial_player: UserId,
-    pub initial_player_name: String,
+    pub initial_player_name: PlayerName,
     pub channel: ChannelId,
     pub localization: Localization,
 }
@@ -64,7 +64,7 @@ pub struct GameStartEvent {
 impl GameStartEvent {
     pub fn new(
         initial_player: UserId,
-        initial_player_name: String,
+        initial_player_name: PlayerName,
         channel: ChannelId,
         localization: Localization,
     ) -> Self {
@@ -106,12 +106,12 @@ impl TurnEndEvent {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerJoinEvent {
     pub player: UserId,
-    pub player_name: String,
+    pub player_name: PlayerName,
     pub channel: ChannelId,
 }
 
 impl PlayerJoinEvent {
-    pub fn new(player: UserId, player_name: String, channel: ChannelId) -> Self {
+    pub fn new(player: UserId, player_name: PlayerName, channel: ChannelId) -> Self {
         Self {
             player,
             player_name,
@@ -126,6 +126,7 @@ pub struct EventsPlugin;
 impl Plugin for EventsPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app
+            .add_event::<(ChannelId, BattleLogEvent)>()
             .add_event::<BygonePartDeathEvent>()
             .add_event::<DeactivateEvent>()
             .add_event::<DelayedEvent>()
@@ -136,6 +137,16 @@ impl Plugin for EventsPlugin {
             .add_event::<PlayerJoinEvent>()
             .add_event::<TurnEndEvent>();
     }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum BattleLogEvent {
+    PlayerDead(PlayerName),
+    PlayerHit(PlayerName, BygonePart),
+    PlayerMiss(PlayerName),
+    BygoneHit(PlayerName),
+    BygoneMiss,
+    BygoneDead,
 }
 
 #[derive(Clone, Debug)]
