@@ -6,6 +6,7 @@ mod dice;
 mod events;
 mod game_helpers;
 mod systems;
+mod cli;
 
 use std::{env, error::Error, sync::{Arc, Mutex}, time::{Duration}, collections::{HashMap, HashSet}, fs};
 
@@ -14,10 +15,12 @@ use command_parser::is_game_starting;
 use components::PlayerName;
 use events::{EventsPlugin, InputEvent, GameStartEvent, PlayerAttackEvent};
 use futures::{stream::{StreamExt}};
-use game_helpers::{GameRenderMessage, get_games_filename, Game, EventDelay};
+use game_helpers::{GameRenderMessage, Game, EventDelay};
 use localization::{Localizations, Localization};
+use structopt::StructOpt;
 use std::sync::mpsc::{self, Sender};
 
+use crate::cli::Args;
 use crate::{command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
 
 use bevy::{prelude::*, app::ScheduleRunnerSettings};
@@ -25,7 +28,7 @@ use bevy_rng::*;
 
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
-use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId}, channel::{Reaction, ReactionType}, user::CurrentUser};
+use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id::{ChannelId, MessageId, GuildId, UserId}, channel::{Reaction, ReactionType}, user::CurrentUser};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -135,22 +138,49 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
-    let games = match std::env::args().nth(1) {
-        Some(arg) => {
-            if arg != "-p" {
-                match fs::read(get_games_filename()) {
-                    Ok(games_data) => match serde_json::from_slice(&games_data) {
-                        Ok(deserialized_games) => deserialized_games,
-                        Err(_) => HashMap::<ChannelId, Game>::new(),
-                    },
-                    Err(_) => HashMap::<ChannelId, Game>::new(),
-                }
-            } else {
-                HashMap::new()
-            }
+    let args = Args::from_args();
+    let games = match fs::read(&args.games_path) {
+        Ok(games_data) => match serde_json::from_slice(&games_data) {
+            Ok(deserialized_games) => deserialized_games,
+            Err(_) => HashMap::<ChannelId, Game>::new(),
         },
-        None => HashMap::new(),
+        Err(_) => HashMap::<ChannelId, Game>::new(),
     };
+    let scoreboard = match fs::read(&args.scoreboard_path) {
+        Ok(scoreboard_data) => match serde_json::from_slice(&scoreboard_data) {
+            Ok(deserialized_scoreboard) => deserialized_scoreboard,
+            Err(_) => HashMap::<GuildId, HashMap<UserId, usize>>::new(),
+        },
+        Err(_) => HashMap::<GuildId, HashMap<UserId, usize>>::new(),
+    };
+
+    let (games_sender, games_receiver) = mpsc::channel::<HashMap::<ChannelId, Game>>();
+    let games_path = args.games_path.clone();
+
+    tokio::spawn(async move {
+        loop {
+            let games = games_receiver.recv_timeout(Duration::from_secs(1));
+            if let Ok(games) = games {
+                if let Ok(serialized_games) = serde_json::to_string(&games) {
+                    fs::write(&games_path, serialized_games);
+                }
+            }
+        }
+    });
+
+    let (scoreboard_sender, scoreboard_receiver) = mpsc::channel::<HashMap::<GuildId, HashMap<UserId, usize>>>();
+    let scoreboard_path = args.scoreboard_path.clone();
+
+    tokio::spawn(async move {
+        loop {
+            let scoreboard = scoreboard_receiver.recv_timeout(Duration::from_secs(1));
+            if let Ok(scoreboard) = scoreboard {
+                if let Ok(serialized_scoreboard) = serde_json::to_string(&scoreboard) {
+                    fs::write(&scoreboard_path, serialized_scoreboard);
+                }
+            }
+        }
+    });
 
     let render_label = "render";
 
@@ -158,6 +188,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
         .insert_resource(EventDelay(Duration::from_millis(150)))
         .insert_resource(games)
+        .insert_resource(scoreboard)
         .insert_resource(HashMap::<ChannelId, Vec<String>>::new())
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
@@ -180,7 +211,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }).label(render_label))
         .add_system(ready_players.system())
         .add_system(cleanup.system())
-        .add_system(save_games.system())
+        .add_system(save_games.system().config(|params| {
+            params.0 = Some(Some(Mutex::new(games_sender)));
+        }))
+        .add_system(save_scoreboard.system().config(|params| {
+            params.0 = Some(Some(Mutex::new(scoreboard_sender)));
+        }))
         .run();
 
     Ok(())

@@ -138,8 +138,3 @@ impl GameRenderMessage {
         }
     }
 }
-
-pub fn get_games_filename() -> PathBuf {
-    let dir = env::current_dir().unwrap();
-    dir.join("games.json")
-}

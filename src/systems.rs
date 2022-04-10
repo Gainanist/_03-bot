@@ -3,9 +3,9 @@ use std::{sync::{mpsc::{Receiver, Sender}, Mutex}, collections::{HashMap, VecDeq
 use bevy::prelude::*;
 use enum_map::EnumMap;
 use twilight_embed_builder::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
-use twilight_model::id::{ChannelId, UserId};
+use twilight_model::id::{ChannelId, UserId, GuildId};
 
-use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage, get_games_filename}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, PlayerName}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
+use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, PlayerName}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
 
 pub fn listen(
     mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
@@ -475,8 +475,24 @@ pub fn cleanup(
     }
 }
 
-pub fn save_games(games: Res<HashMap<ChannelId, Game>>) {
-    if let Ok(serialized_games) = serde_json::to_string(&*games) {
-        fs::write(get_games_filename(), serialized_games);
+pub fn save_games(
+    sender: Local<Option<Mutex<Sender<HashMap<ChannelId, Game>>>>>,
+    games: Res<HashMap<ChannelId, Game>>,
+) {
+    if let Some(sender) = &*sender {
+        if let Ok(ref mut sender_lock) = sender.lock() {    
+            sender_lock.send(games.clone());
+        }
+    }
+}
+
+pub fn save_scoreboard(
+    sender: Local<Option<Mutex<Sender<HashMap::<GuildId, HashMap<UserId, usize>>>>>>,
+    scoreboard: Res<HashMap::<GuildId, HashMap<UserId, usize>>>,
+) {
+    if let Some(sender) = &*sender {
+        if let Ok(ref mut sender_lock) = sender.lock() {    
+            sender_lock.send(scoreboard.clone());
+        }
     }
 }
