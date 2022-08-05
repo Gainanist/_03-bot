@@ -1,5 +1,4 @@
-use bevy_turborand::{GlobalRng};
-
+use bevy_turborand::GlobalRng;
 
 pub trait Dice {
     fn d100(&mut self) -> isize;

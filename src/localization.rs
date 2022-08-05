@@ -86,7 +86,7 @@ impl Localizations {
     pub fn new() -> Self {
         let localization_ru = Localization {
             attack: LocalizedLine("АТК".to_string()),
-        
+
             status_title: LocalizedLine("Статус".to_string()),
             core_title: LocalizedLine(":regional_indicator_c: ядро".to_string()),
             sensor_title: LocalizedLine(":regional_indicator_s: сенсор".to_string()),
@@ -144,7 +144,7 @@ impl Localizations {
             lost: LocalizedLine("*Так темно… Я что, умер? Здесь так спокойно.*".to_string()),
             won: LocalizedLine("*Человек торжествует над машиной!*".to_string()),
         };
-        
+
         let localization_en = Localization {
             attack: LocalizedLine("ATK".to_string()),
 
@@ -209,13 +209,13 @@ impl Localizations {
         let mut localizations = HashMap::with_capacity(2);
         localizations.insert(Language::Ru, localization_ru);
         localizations.insert(Language::En, localization_en);
-        
+
         Localizations(localizations)
     }
 
     pub fn get(&self, language: Language) -> &Localization {
-        self.0.get(&language).unwrap_or(
-            self.0.get(&Language::En).unwrap()
-        )
+        self.0
+            .get(&language)
+            .unwrap_or(self.0.get(&Language::En).unwrap())
     }
 }

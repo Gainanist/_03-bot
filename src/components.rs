@@ -1,9 +1,12 @@
-use bevy::{prelude::Component};
-use bevy_turborand::{RngComponent, GlobalRng};
+use bevy::prelude::Component;
+use bevy_turborand::{GlobalRng, RngComponent};
 use enum_map::Enum;
-use twilight_model::id::{marker::{GuildMarker, UserMarker}, Id};
+use twilight_model::id::{
+    marker::{GuildMarker, UserMarker},
+    Id,
+};
 
-use crate::{localization::{Localization, RenderText}};
+use crate::localization::{Localization, RenderText};
 
 #[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
 pub struct Health {
@@ -13,10 +16,7 @@ pub struct Health {
 
 impl Health {
     pub fn new(max: usize) -> Self {
-        Health {
-            current: max,
-            max,
-        }
+        Health { current: max, max }
     }
 
     pub fn reduce(&mut self, amount: usize) {
@@ -42,14 +42,12 @@ impl Health {
 
 impl RenderText for Health {
     fn render_text(&self, _localization: &Localization) -> String {
-        let current_health = String::from("▮")
-            .repeat(self.current());
+        let current_health = String::from("▮").repeat(self.current());
         let empty_health_char = match self.alive() {
             true => "▯",
             false => "X",
         };
-        let empty_health = String::from(empty_health_char)
-            .repeat(self.max() - self.current());
+        let empty_health = String::from(empty_health_char).repeat(self.max() - self.current());
 
         format!("[{}{}]", current_health, empty_health)
     }
@@ -84,7 +82,10 @@ impl Vitality {
     pub fn take_attack(&mut self, damage: usize, accuracy: isize) -> bool {
         if accuracy >= self.dodge {
             self.health.reduce(damage);
-            println!("Taking damage: {}, accuracy: {}, dodge: {}", damage, accuracy, self.dodge);
+            println!(
+                "Taking damage: {}, accuracy: {}, dodge: {}",
+                damage, accuracy, self.dodge
+            );
             return true;
         }
         false
@@ -94,7 +95,11 @@ impl Vitality {
 impl RenderText for Vitality {
     fn render_text(&self, localization: &Localization) -> String {
         if self.health.alive() {
-            format!("{} - {}%", self.health.render_text(localization), 100_usize.saturating_sub(self.dodge.max(0) as usize))
+            format!(
+                "{} - {}%",
+                self.health.render_text(localization),
+                100_usize.saturating_sub(self.dodge.max(0) as usize)
+            )
         } else {
             self.health.render_text(localization)
         }
@@ -109,10 +114,7 @@ pub struct Attack {
 
 impl Attack {
     pub fn new(damage: usize, accuracy: isize) -> Self {
-        Attack {
-            damage,
-            accuracy,
-        }
+        Attack { damage, accuracy }
     }
 
     pub fn accuracy(&self) -> isize {
@@ -130,7 +132,10 @@ impl Attack {
 
 impl RenderText for Attack {
     fn render_text(&self, localization: &Localization) -> String {
-        format!("{} {}, {}%", localization.attack, self.damage, self.accuracy)
+        format!(
+            "{} {}, {}%",
+            localization.attack, self.damage, self.accuracy
+        )
     }
 }
 
@@ -151,7 +156,8 @@ impl RenderText for BygonePart {
             BygonePart::Gun => &localization.gun.0,
             BygonePart::LeftWing => &localization.left_wing.0,
             BygonePart::RightWing => &localization.right_wing.0,
-        }.clone()
+        }
+        .clone()
     }
 }
 
@@ -185,7 +191,8 @@ impl RenderText for Bygone03Stage {
             Self::Exposed => &localization.core_exposed.0,
             Self::Burning => &localization.core_burning.0,
             Self::Defeated => &localization.core_destroyed.0,
-        }.clone()
+        }
+        .clone()
     }
 }
 

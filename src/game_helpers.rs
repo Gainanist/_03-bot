@@ -1,9 +1,17 @@
-use std::{time::{Duration, Instant, SystemTime}, path::PathBuf, env, ops::Sub};
+use std::{
+    env,
+    ops::Sub,
+    path::PathBuf,
+    time::{Duration, Instant, SystemTime},
+};
 
 use arrayvec::ArrayVec;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
-use twilight_model::{channel::embed::Embed, id::{Id, marker::GuildMarker}};
+use twilight_model::{
+    channel::embed::Embed,
+    id::{marker::GuildMarker, Id},
+};
 
 use crate::localization::Localization;
 

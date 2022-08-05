@@ -1,12 +1,13 @@
-
-
-use bevy::{prelude::*};
+use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
 use enum_map::{enum_map, EnumMap};
-use rand::{Rng};
-use twilight_model::id::{marker::{GuildMarker, UserMarker}, Id};
+use rand::Rng;
+use twilight_model::id::{
+    marker::{GuildMarker, UserMarker},
+    Id,
+};
 
-use crate::{components::*};
+use crate::components::*;
 
 #[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
 pub struct BygoneParts(pub EnumMap<BygonePart, Vitality>);
@@ -39,7 +40,7 @@ impl Bygone03Bundle {
             BygonePart::RightWing => Vitality::new(wings_hp, 30),
         });
         let attack = Attack::new(rng.usize(min_attack..=max_attack), 100);
-    
+
         Self {
             guild: GuildIdComponent(guild),
             parts,
@@ -81,5 +82,3 @@ impl PlayerBundle {
         }
     }
 }
-
-

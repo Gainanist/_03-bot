@@ -1,7 +1,13 @@
 use bevy::prelude::*;
-use twilight_model::id::{Id, marker::{GuildMarker, UserMarker}};
+use twilight_model::id::{
+    marker::{GuildMarker, UserMarker},
+    Id,
+};
 
-use crate::{components::{BygonePart, PlayerName}, localization::Localization};
+use crate::{
+    components::{BygonePart, PlayerName},
+    localization::Localization,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DeactivateEvent(pub Entity);
@@ -14,10 +20,7 @@ pub struct BygonePartDeathEvent {
 
 impl BygonePartDeathEvent {
     pub fn new(entity: Entity, part: BygonePart) -> Self {
-        Self {
-            entity,
-            part,
-        }
+        Self { entity, part }
     }
 }
 
@@ -30,7 +33,12 @@ pub struct PlayerAttackEvent {
 }
 
 impl PlayerAttackEvent {
-    pub fn new(player: Id<UserMarker>, player_name: PlayerName, guild: Id<GuildMarker>, target: BygonePart) -> Self {
+    pub fn new(
+        player: Id<UserMarker>,
+        player_name: PlayerName,
+        guild: Id<GuildMarker>,
+        target: BygonePart,
+    ) -> Self {
         Self {
             player,
             player_name,
@@ -47,9 +55,7 @@ pub struct EnemyAttackEvent {
 
 impl EnemyAttackEvent {
     pub fn new(guild: Id<GuildMarker>) -> Self {
-        Self {
-            guild,
-        }
+        Self { guild }
     }
 }
 
@@ -84,9 +90,7 @@ pub struct GameDrawEvent {
 
 impl GameDrawEvent {
     pub fn new(guild_id: Id<GuildMarker>) -> Self {
-        Self {
-            guild_id,
-        }
+        Self { guild_id }
     }
 }
 
@@ -97,9 +101,7 @@ pub struct TurnEndEvent {
 
 impl TurnEndEvent {
     pub fn new(guild_id: Id<GuildMarker>) -> Self {
-        Self {
-            guild_id,
-        }
+        Self { guild_id }
     }
 }
 
@@ -125,8 +127,7 @@ pub struct EventsPlugin;
 
 impl Plugin for EventsPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_event::<(Id<GuildMarker>, BattleLogEvent)>()
+        app.add_event::<(Id<GuildMarker>, BattleLogEvent)>()
             .add_event::<BygonePartDeathEvent>()
             .add_event::<DeactivateEvent>()
             .add_event::<DelayedEvent>()
