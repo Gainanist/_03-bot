@@ -1,9 +1,11 @@
-use bevy::ecs::system::ResMutState;
+use bevy::{prelude::Component};
+use bevy_turborand::{RngComponent, GlobalRng};
 use enum_map::Enum;
+use twilight_model::id::{marker::{GuildMarker, UserMarker}, Id};
 
-use crate::{dice::IDiceRoll, localization::{Localization, RenderText}};
+use crate::{localization::{Localization, RenderText}};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
 pub struct Health {
     current: usize,
     max: usize,
@@ -53,7 +55,7 @@ impl RenderText for Health {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
 pub struct Vitality {
     health: Health,
     dodge: isize,
@@ -99,7 +101,28 @@ impl RenderText for Vitality {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Dice {
+    rng: RngComponent,
+    min: isize,
+    max: isize,
+}
+
+impl Dice {
+    pub fn new_d100(rng: &mut GlobalRng) -> Self {
+        Self {
+            rng: RngComponent::from_global(rng),
+            min: 0,
+            max: 100,
+        }
+    }
+
+    pub fn roll(&mut self) -> isize {
+        self.rng.isize(self.min..self.max)
+    }
+}
+
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Attack {
     damage: usize,
     accuracy: isize,
@@ -121,8 +144,8 @@ impl Attack {
         self.accuracy += modifier
     }
 
-    pub fn attack(&self, target: &mut Vitality, dice_roll: IDiceRoll) -> bool {
-        target.take_attack(self.damage, self.accuracy + dice_roll.0)
+    pub fn attack(&self, target: &mut Vitality, dice: &mut AttackDice) -> bool {
+        target.take_attack(self.damage, self.accuracy + dice.0.roll())
     }
 }
 
@@ -132,7 +155,10 @@ impl RenderText for Attack {
     }
 }
 
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct AttackDice(pub Dice);
+
+#[derive(Clone, Copy, Component, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum BygonePart {
     Core,
     Sensor,
@@ -153,7 +179,7 @@ impl RenderText for BygonePart {
     }
 }
 
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Bygone03Stage {
     Armored,
     Exposed,
@@ -187,17 +213,23 @@ impl RenderText for Bygone03Stage {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Enemy;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Player;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Active;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ready;
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlayerName(pub String);
+
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GuildIdComponent(pub Id<GuildMarker>);
+
+#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct UserIdComponent(pub Id<UserMarker>);

@@ -1,12 +1,15 @@
-use std::path::PathBuf;
-use structopt::StructOpt;
+use std::{path::PathBuf};
+use clap::Parser;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "_03-bot", about = "DES... TROY")]
-pub struct Args {
-    #[structopt(parse(from_os_str))]
-    pub games_path: std::path::PathBuf,
+/// Discord bot to fight enemies from Uof7
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct Cli {
+    /// SAved games file
+    #[clap(short, long, value_parser, value_name = "FILE")]
+    pub games_path: PathBuf,
 
-    #[structopt(parse(from_os_str))]
-    pub scoreboard_path: std::path::PathBuf,
+    /// Scoreboard file
+    #[clap(short, long, value_parser, value_name = "FILE")]
+    pub scoreboard_path: PathBuf,
 }

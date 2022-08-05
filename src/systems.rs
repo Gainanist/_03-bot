@@ -1,71 +1,77 @@
 use std::{sync::{mpsc::{Receiver, Sender}, Mutex}, collections::{HashMap, VecDeque, HashSet}, time::{SystemTime, Instant}, ops::DerefMut, fs};
 
 use bevy::prelude::*;
+use bevy_turborand::GlobalRng;
 use enum_map::EnumMap;
 use twilight_embed_builder::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
-use twilight_model::id::{ChannelId, UserId, GuildId};
+use twilight_model::id::{Id, marker::{GuildMarker, UserMarker}};
 
-use crate::{events::*, localization::RenderText, game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage}, components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, PlayerName}, bundles::{Bygone03Bundle, PlayerBundle}, dice::Dice};
+use crate::{
+    events::*,
+    localization::RenderText,
+    game_helpers::{Game, GameStatus, GameId, EventDelay, GameTimer, GameRenderMessage},
+    components::{Active, Player, Attack, Vitality, BygonePart, Enemy, Bygone03Stage, Ready, PlayerName},
+    bundles::{Bygone03Bundle, PlayerBundle},
+};
 
-pub fn listen(
-    mut input_receiver: Local<Option<Mutex<Receiver<InputEvent>>>>,
-    mut games: ResMut<HashMap<ChannelId, Game>>,
-    mut ev_game_start: EventWriter<GameStartEvent>,
-    mut ev_player_attack: EventWriter<PlayerAttackEvent>,
-    mut ev_delayed: EventWriter<DelayedEvent>,
-    mut ev_player_join: EventWriter<PlayerJoinEvent>,
-    players: Query<(&UserId, Option<&Active>), (With<Player>,)>,
+pub fn listen(mut input_receiver: Mutex<Receiver<InputEvent>>) -> impl FnMut(
+    ResMut<HashMap<Id<GuildMarker>, Game>>,
+    EventWriter<GameStartEvent>,
+    EventWriter<PlayerAttackEvent>,
+    EventWriter<DelayedEvent>,
+    EventWriter<PlayerJoinEvent>,
+    Query<(&UserId, Option<&Active>), (With<Player>,)>,
 ) {
-    let mut events = Vec::new();
-    if let Some(input_receiver) = &mut *input_receiver {
+    move |games, mut ev_game_start, mut ev_player_attack, mut ev_delayed, mut ev_player_join, mut players| {
+        let mut events = Vec::new();
         if let Ok(ref mut receiver_lock) = input_receiver.try_lock() {
             while let Ok(event) = receiver_lock.try_recv() {
                 events.push(event);
             }
         }
-    }
-    let events = events;
+        let events = events;
 
-    let players: HashMap<_, _> = players.iter().collect();
+        let players: HashMap<_, _> = players.iter().collect();
 
-    for (i, event) in events.into_iter().enumerate() {
-        match event {
-            InputEvent::GameStart(ev) => {
-                let should_start_new_game = match games.get(&ev.channel) {
-                    Some(game) =>
-                        game.status == GameStatus::Lost
-                        || game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60,
-                    None => true,
-                };
-                if should_start_new_game {
-                    ev_game_start.send(ev.clone());
-                    games.insert(ev.channel, Game::new(
-                        GameId::from_current_time(i as u128),
-                        ev.localization
-                    ));
-                    ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.initial_player_name, ev.channel));
-                    ev_delayed.send(DelayedEvent::GameDraw(GameDrawEvent::new(ev.channel)));
-                }
-            }
-            InputEvent::PlayerAttack(ev) => {
-                if games.contains_key(&ev.channel) {
-                    match players.get(&ev.player) {
-                        Some(maybe_active) => {
-                            if let Some(_active) = maybe_active {
-                                ev_player_attack.send(ev);
-                            }
-                        },
-                        None => {
-                            ev_player_join.send(PlayerJoinEvent::new(
-                                ev.player.clone(),
-                                ev.player_name.clone(),
-                                ev.channel.clone(),
-                            ));
-                            ev_delayed.send(DelayedEvent::PlayerAttack(ev));
-                        }
+        for (i, event) in events.into_iter().enumerate() {
+            match event {
+                InputEvent::GameStart(ev) => {
+                    let should_start_new_game = match games.get(&ev.channel) {
+                        Some(game) =>
+                            game.status == GameStatus::Lost
+                            || game.status != GameStatus::Ongoing && elapsed_since(&game.start_time) > 60*60,
+                        None => true,
+                    };
+                    if should_start_new_game {
+                        ev_game_start.send(ev.clone());
+                        games.insert(ev.channel, Game::new(
+                            GameId::from_current_time(i as u128),
+                            ev.localization
+                        ));
+                        ev_player_join.send(PlayerJoinEvent::new(ev.initial_player, ev.initial_player_name, ev.channel));
+                        ev_delayed.send(DelayedEvent::GameDraw(GameDrawEvent::new(ev.channel)));
                     }
                 }
-            },
+                InputEvent::PlayerAttack(ev) => {
+                    if games.contains_key(&ev.channel) {
+                        match players.get(&ev.player) {
+                            Some(maybe_active) => {
+                                if let Some(_active) = maybe_active {
+                                    ev_player_attack.send(ev);
+                                }
+                            },
+                            None => {
+                                ev_player_join.send(PlayerJoinEvent::new(
+                                    ev.player.clone(),
+                                    ev.player_name.clone(),
+                                    ev.channel.clone(),
+                                ));
+                                ev_delayed.send(DelayedEvent::PlayerAttack(ev));
+                            }
+                        }
+                    }
+                },
+            }
         }
     }
 }
@@ -100,7 +106,7 @@ pub fn delay_events(
 }
 
 pub fn turn_timer(
-    mut timers: Local<HashMap<ChannelId, GameTimer>>,
+    mut timers: Local<HashMap<Id<GuildMarker>, GameTimer>>,
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
     mut ev_enemy_attack: EventWriter<EnemyAttackEvent>,
     mut ev_game_draw: EventWriter<GameDrawEvent>,
@@ -123,9 +129,9 @@ pub fn turn_timer(
     }
 }
 
-pub fn spawn_bygones(mut commands: Commands, mut dice: Local<bevy_rng::Rng>, mut ev_game_start: EventReader<GameStartEvent>) {
+pub fn spawn_bygones(mut commands: Commands, mut global_rng: ResMut<GlobalRng>, mut ev_game_start: EventReader<GameStartEvent>) {
     for ev in ev_game_start.iter() {
-        commands.spawn_bundle(Bygone03Bundle::with_normal_health(ev.channel, &mut dice));
+        commands.spawn_bundle(Bygone03Bundle::with_normal_health(ev.channel, &mut global_rng));
     }
 }
 
@@ -139,11 +145,11 @@ pub fn damage_bygone(
     mut commands: Commands,
     mut ev_player_attack: EventReader<PlayerAttackEvent>,
     mut ev_part_death: EventWriter<BygonePartDeathEvent>,
-    mut ev_battle_log: EventWriter<(ChannelId, BattleLogEvent)>,
+    mut ev_battle_log: EventWriter<(Id<GuildMarker>, BattleLogEvent)>,
     mut dice: Local<bevy_rng::Rng>,
     mut actors: QuerySet<(
-        Query<(Entity, &UserId, &PlayerName, &ChannelId, &Attack), (With<Player>, With<Active>, With<Ready>)>,
-        Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>), (With<Enemy>, With<Active>)>,
+        Query<(Entity, &UserId, &PlayerName, &GuildIdComponent, &Attack), (With<Player>, With<Active>, With<Ready>)>,
+        Query<(Entity, &GuildIdComponent,  &mut EnumMap<BygonePart, Vitality>), (With<Enemy>, With<Active>)>,
     )>,
 ) {
     let target_parts: HashMap<_, _> = ev_player_attack.iter()
@@ -183,9 +189,9 @@ pub fn damage_bygone(
 
 pub fn process_bygone_part_death(
     mut ev_part_death: EventReader<BygonePartDeathEvent>,
-    mut ev_battle_log: EventWriter<(ChannelId, BattleLogEvent)>,
+    mut ev_battle_log: EventWriter<(Id<GuildMarker>, BattleLogEvent)>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
-    mut bygones: Query<(Entity, &ChannelId,  &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
+    mut bygones: Query<(Entity, &GuildIdComponent,  &mut EnumMap<BygonePart, Vitality>, &mut Attack, &mut Bygone03Stage), (With<Enemy>, With<Active>)>,
 ) {
     for BygonePartDeathEvent { entity, part } in ev_part_death.iter() {
         for (bygone_entity,
@@ -226,11 +232,11 @@ pub fn process_bygone_part_death(
 
 pub fn damage_players(
     mut ev_enemy_attack: EventReader<EnemyAttackEvent>,
-    mut ev_battle_log: EventWriter<(ChannelId, BattleLogEvent)>,
+    mut ev_battle_log: EventWriter<(Id<GuildMarker>, BattleLogEvent)>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut dice: Local<bevy_rng::Rng>,
-    mut players: Query<(Entity, &ChannelId, &PlayerName, &mut Vitality), (With<Player>, With<Active>)>,
-    enemies: Query<(&ChannelId, &Attack), (With<Enemy>, With<Active>)>,
+    mut players: Query<(Entity, &GuildIdComponent, &PlayerName, &mut Vitality), (With<Player>, With<Active>)>,
+    enemies: Query<(&GuildIdComponent, &Attack), (With<Enemy>, With<Active>)>,
 ) {
     for EnemyAttackEvent{ channel } in ev_enemy_attack.iter() {
         let mut players: Vec<_> = players.iter_mut()
@@ -266,11 +272,11 @@ pub fn deactivate(
 }
 
 pub fn update_game_status(
-    mut games: ResMut<HashMap<ChannelId, Game>>,
+    mut games: ResMut<HashMap<Id<GuildMarker>, Game>>,
     mut ev_deactivate: EventReader<DeactivateEvent>,
-    active_players: Query<(Entity, &ChannelId,), (With<Player>, With<Active>)>,
-    active_enemies: Query<(Entity, &ChannelId,), (With<Enemy>, With<Active>)>,
-    entities: Query<(Entity, &ChannelId), (Or<(With<Enemy>, With<Player>)>,)>,
+    active_players: Query<(Entity, &GuildIdComponent,), (With<Player>, With<Active>)>,
+    active_enemies: Query<(Entity, &GuildIdComponent,), (With<Enemy>, With<Active>)>,
+    entities: Query<(Entity, &GuildIdComponent), (Or<(With<Enemy>, With<Player>)>,)>,
 ) {
     let deactivated: HashSet<_> = ev_deactivate.iter()
         .filter_map(|ev| entities.get(ev.0).ok())
@@ -295,10 +301,10 @@ pub fn update_game_status(
 }
 
 pub fn log_battle(
-    games: Res<HashMap<ChannelId, Game>>,
-    mut battle_log: ResMut<HashMap<ChannelId, Vec<String>>>,
+    games: Res<HashMap<Id<GuildMarker>, Game>>,
+    mut battle_log: ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
     mut dice: Local<bevy_rng::Rng>,
-    mut ev_battle_log: EventReader<(ChannelId, BattleLogEvent)>,
+    mut ev_battle_log: EventReader<(Id<GuildMarker>, BattleLogEvent)>,
     mut ev_player_join: EventReader<PlayerJoinEvent>,
 ) {
     for (channel_id, ev) in ev_battle_log.iter() {
@@ -353,92 +359,91 @@ pub fn log_battle(
     }
 }
 
-pub fn render(
-    sender: Local<Option<Mutex<Sender<GameRenderMessage>>>>,
-    games: Res<HashMap<ChannelId, Game>>,
-    mut battle_log: ResMut<HashMap<ChannelId, Vec<String>>>,
-    mut ev_game_draw: EventReader<GameDrawEvent>,
-    players: Query<(&PlayerName, &ChannelId, &Vitality), (With<Player>,)>,
-    enemies: Query<(&ChannelId, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
+pub fn render(sender: Mutex<Sender<GameRenderMessage>>) -> impl FnMut(
+    Res<HashMap<Id<GuildMarker>, Game>>,
+    ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
+    EventReader<GameDrawEvent>,
+    Query<(&PlayerName, &GuildIdComponent, &Vitality), (With<Player>,)>,
+    Query<(&GuildIdComponent, &EnumMap<BygonePart, Vitality>, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
-    for GameDrawEvent{ channel_id } in ev_game_draw.iter() {
-        if let Some(game) = games.get(channel_id) {
-            let loc = &game.localization;
-            let mut message = GameRenderMessage::new(
-                *channel_id,
-                game.game_id,
-            );
-            message.embeds.title = Some(match game.status {
-                GameStatus::Ongoing => EmbedBuilder::new()
-                    .description(&loc.title)
-                    .image(
-                        ImageSource::url(
-                            "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif"
-                        ).unwrap()
-                    )
-                    .build()
-                    .unwrap(),
-                GameStatus::Won => EmbedBuilder::new()
-                    .description(&loc.won)
-                    .build()
-                    .unwrap(),
-                GameStatus::Lost => EmbedBuilder::new()
-                    .description(&loc.lost)
-                    .build()
-                    .unwrap(),
-            });
-            if game.status == GameStatus::Ongoing {
-                for (enemy_channel_id, parts, attack, stage) in enemies.iter() {
-                    if enemy_channel_id != channel_id {
-                        continue;
-                    }
-                    let loc = &game.localization;
-                    let status = format!(" • {}\n • {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
-                    let core = parts[BygonePart::Core].render_text(loc);
-                    let sensor = parts[BygonePart::Sensor].render_text(loc);
-                    let left_wing = parts[BygonePart::LeftWing].render_text(loc);
-                    let right_wing = parts[BygonePart::RightWing].render_text(loc);
-                    let gun = parts[BygonePart::Gun].render_text(loc);
+    move |games, mut battle_log, mut ev_game_draw, players, enemies| {
+        for GameDrawEvent{ channel_id } in ev_game_draw.iter() {
+            if let Some(game) = games.get(channel_id) {
+                let loc = &game.localization;
+                let mut message = GameRenderMessage::new(
+                    *channel_id,
+                    game.game_id,
+                );
+                message.embeds.title = Some(match game.status {
+                    GameStatus::Ongoing => EmbedBuilder::new()
+                        .description(&loc.title)
+                        .image(
+                            ImageSource::url(
+                                "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif"
+                            ).unwrap()
+                        )
+                        .build()
+                        .unwrap(),
+                    GameStatus::Won => EmbedBuilder::new()
+                        .description(&loc.won)
+                        .build()
+                        .unwrap(),
+                    GameStatus::Lost => EmbedBuilder::new()
+                        .description(&loc.lost)
+                        .build()
+                        .unwrap(),
+                });
+                if game.status == GameStatus::Ongoing {
+                    for (enemy_channel_id, parts, attack, stage) in enemies.iter() {
+                        if enemy_channel_id != channel_id {
+                            continue;
+                        }
+                        let loc = &game.localization;
+                        let status = format!(" • {}\n • {}: {}", attack.render_text(loc), &loc.core, stage.render_text(loc));
+                        let core = parts[BygonePart::Core].render_text(loc);
+                        let sensor = parts[BygonePart::Sensor].render_text(loc);
+                        let left_wing = parts[BygonePart::LeftWing].render_text(loc);
+                        let right_wing = parts[BygonePart::RightWing].render_text(loc);
+                        let gun = parts[BygonePart::Gun].render_text(loc);
 
-                    message.embeds.enemies = Some(
-                        EmbedBuilder::new()
-                            .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
-                            .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
-                            .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
-                            .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
-                            .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
-                            .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
+                        message.embeds.enemies = Some(
+                            EmbedBuilder::new()
+                                .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
+                                .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
+                                .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
+                                .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
+                                .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
+                                .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
+                                .build()
+                                .unwrap()
+                        );
+                    }
+
+                    if let Some(battle_log_lines) = battle_log.remove(channel_id) {
+                        let battle_log_contents = " • ".to_string() + &battle_log_lines.join("\n • ");
+                        message.embeds.log = Some(EmbedBuilder::new()
+                            .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
                             .build()
                             .unwrap()
-                    );
-                }
-
-                if let Some(battle_log_lines) = battle_log.remove(channel_id) {
-                    let battle_log_contents = " • ".to_string() + &battle_log_lines.join("\n • ");
-                    message.embeds.log = Some(EmbedBuilder::new()
-                        .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
-                        .build()
-                        .unwrap()
-                    );
-                }
-
-                let mut players_embed_builder = EmbedBuilder::new();
-                for (name, player_channel_id, vitality) in players.iter() {
-                    if player_channel_id != channel_id {
-                        continue;
+                        );
                     }
-                    players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
-                        &name.0,
-                        vitality.health().render_text(loc)
-                    ));
-                }
-                let players_embed = players_embed_builder.build().unwrap();
-                if players_embed.fields.len() > 0 {
-                    message.embeds.players = Some(players_embed);
-                }
-            }
 
-            if let Some(sender) = &*sender {
+                    let mut players_embed_builder = EmbedBuilder::new();
+                    for (name, player_channel_id, vitality) in players.iter() {
+                        if player_channel_id != channel_id {
+                            continue;
+                        }
+                        players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
+                            &name.0,
+                            vitality.health().render_text(loc)
+                        ));
+                    }
+                    let players_embed = players_embed_builder.build().unwrap();
+                    if players_embed.fields.len() > 0 {
+                        message.embeds.players = Some(players_embed);
+                    }
+                }
+
                 if let Ok(ref mut sender_lock) = sender.lock() {    
                     sender_lock.send(message);
                 }
@@ -450,7 +455,7 @@ pub fn render(
 pub fn ready_players(
     mut commands: Commands,
     mut ev_turn_end: EventReader<TurnEndEvent>,
-    players: Query<(Entity, &ChannelId), (With<Player>, With<Active>, Without<Ready>)>,
+    players: Query<(Entity, &GuildIdComponent), (With<Player>, With<Active>, Without<Ready>)>,
 ) {
     for ev in ev_turn_end.iter() {
         for (entity, channel_id) in players.iter() {
@@ -463,8 +468,8 @@ pub fn ready_players(
 
 pub fn cleanup(
     mut commands: Commands,
-    games: Res<HashMap<ChannelId, Game>>,
-    entities: Query<(Entity, &ChannelId)>,
+    games: Res<HashMap<Id<GuildMarker>, Game>>,
+    entities: Query<(Entity, &GuildIdComponent)>,
 ) {
     for (entity, channel_id) in entities.iter() {
         if let Some(game) = games.get(channel_id) {
@@ -475,24 +480,22 @@ pub fn cleanup(
     }
 }
 
-pub fn save_games(
-    sender: Local<Option<Mutex<Sender<HashMap<ChannelId, Game>>>>>,
-    games: Res<HashMap<ChannelId, Game>>,
+pub fn save_games(sender: Mutex<Sender<HashMap<Id<GuildMarker>, Game>>>) -> impl FnMut(
+    Res<HashMap<Id<GuildMarker>, Game>>,
 ) {
-    if let Some(sender) = &*sender {
+    move |games| {
         if let Ok(ref mut sender_lock) = sender.lock() {    
             sender_lock.send(games.clone());
         }
     }
 }
 
-pub fn save_scoreboard(
-    sender: Local<Option<Mutex<Sender<HashMap::<GuildId, HashMap<UserId, usize>>>>>>,
-    scoreboard: Res<HashMap::<GuildId, HashMap<UserId, usize>>>,
-) {
-    if let Some(sender) = &*sender {
-        if let Ok(ref mut sender_lock) = sender.lock() {    
-            sender_lock.send(scoreboard.clone());
-        }
-    }
-}
+// pub fn save_scoreboard(sender: Mutex<Sender<HashMap::<GuildId, HashMap<UserId, usize>>>>) -> impl FnMut(
+//     Res<HashMap::<GuildId, HashMap<UserId, usize>>>,
+// ) {
+//     move |scoreboard| {
+//         if let Ok(ref mut sender_lock) = sender.lock() {    
+//             sender_lock.send(scoreboard.clone());
+//         }
+//     }
+// }

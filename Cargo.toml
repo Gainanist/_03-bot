@@ -7,15 +7,15 @@ edition = "2021"
 
 [dependencies]
 arrayvec = "0.7.2"
-bevy = { version = "0.5.0" }
-bevy_rng = { git = "https://github.com/dylanrenwick/bevy_rng", rev = "82bb2b5f4f88143665357fce2075f3cac88acb0a", features = ["bevy-stable"] }
+bevy = "0.8.0"
+bevy_turborand = "0.2.0"
+clap = { version = "3.2.16", features = ["derive"] }
 enum-map = "1.1.1"
 futures = "0.3.17"
 phf = { version = "0.10.1", features = ["macros"] }
 rand = "0.8.4"
 serde = { version = "1.0.132", features = ["derive"] }
 serde_json = "1.0.73"
-structopt = { version = "0.3.26" }
 tokio = { version = "1.13.0", features = ["full"] }
 twilight-embed-builder = "0.9.0"
 twilight-gateway = "0.9.0"

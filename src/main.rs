@@ -7,9 +7,12 @@ mod events;
 mod game_helpers;
 mod systems;
 mod cli;
+mod io;
 
 use std::{env, error::Error, sync::{Arc, Mutex}, time::{Duration}, collections::{HashMap, HashSet}, fs};
 
+use bevy_turborand::RngPlugin;
+use io::{read_json, write_json_from_channel};
 use command_parser::is_game_starting;
 
 use components::PlayerName;
@@ -17,14 +20,12 @@ use events::{EventsPlugin, InputEvent, GameStartEvent, PlayerAttackEvent};
 use futures::{stream::{StreamExt}};
 use game_helpers::{GameRenderMessage, Game, EventDelay};
 use localization::{Localizations, Localization};
-use structopt::StructOpt;
 use std::sync::mpsc::{self, Sender};
 
-use crate::cli::Args;
+use crate::cli::Cli;
 use crate::{command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
 
 use bevy::{prelude::*, app::ScheduleRunnerSettings};
-use bevy_rng::*;
 
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType};
@@ -138,53 +139,31 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
-    let args = Args::from_args();
-    let games = match fs::read(&args.games_path) {
-        Ok(games_data) => match serde_json::from_slice(&games_data) {
-            Ok(deserialized_games) => deserialized_games,
-            Err(_) => HashMap::<ChannelId, Game>::new(),
-        },
-        Err(_) => HashMap::<ChannelId, Game>::new(),
-    };
-    let scoreboard = match fs::read(&args.scoreboard_path) {
-        Ok(scoreboard_data) => match serde_json::from_slice(&scoreboard_data) {
-            Ok(deserialized_scoreboard) => deserialized_scoreboard,
-            Err(_) => HashMap::<GuildId, HashMap<UserId, usize>>::new(),
-        },
-        Err(_) => HashMap::<GuildId, HashMap<UserId, usize>>::new(),
-    };
+    let cli = Cli::parse();
+    let games = read_json::<HashMap::<GuildId, Game>>(&cli.games_path);
+    let scoreboard = read_json::<HashMap::<GuildId, HashMap<UserId, usize>>>(&cli.scoreboard_path);
 
-    let (games_sender, games_receiver) = mpsc::channel::<HashMap::<ChannelId, Game>>();
-    let games_path = args.games_path.clone();
+    let (games_sender, games_receiver) = mpsc::channel::<HashMap::<GuildId, Game>>();
+    let games_path = cli.games_path.clone();
 
     tokio::spawn(async move {
         loop {
-            let games = games_receiver.recv_timeout(Duration::from_secs(1));
-            if let Ok(games) = games {
-                if let Ok(serialized_games) = serde_json::to_string(&games) {
-                    fs::write(&games_path, serialized_games);
-                }
-            }
+            write_json_from_channel(&games_receiver, &games_path);
         }
     });
 
-    let (scoreboard_sender, scoreboard_receiver) = mpsc::channel::<HashMap::<GuildId, HashMap<UserId, usize>>>();
-    let scoreboard_path = args.scoreboard_path.clone();
+    // let (scoreboard_sender, scoreboard_receiver) = mpsc::channel::<HashMap::<GuildId, HashMap<UserId, usize>>>();
+    // let scoreboard_path = cli.scoreboard_path.clone();
 
-    tokio::spawn(async move {
-        loop {
-            let scoreboard = scoreboard_receiver.recv_timeout(Duration::from_secs(1));
-            if let Ok(scoreboard) = scoreboard {
-                if let Ok(serialized_scoreboard) = serde_json::to_string(&scoreboard) {
-                    fs::write(&scoreboard_path, serialized_scoreboard);
-                }
-            }
-        }
-    });
+    // tokio::spawn(async move {
+    //     loop {
+    //         write_json_from_channel(&scoreboard_receiver, &scoreboard_path);
+    //     }
+    // });
 
     let render_label = "render";
 
-    App::build()
+    App::new()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
         .insert_resource(EventDelay(Duration::from_millis(150)))
         .insert_resource(games)
@@ -193,30 +172,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_plugin(EventsPlugin::default())
-        .add_system(listen.system().config(|params| {
-            params.0 = Some(Some(Mutex::new(input_receiver)));
-        }))
-        .add_system(delay_events.system())
-        .add_system(turn_timer.system())
-        .add_system(spawn_bygones.system())
-        .add_system(spawn_players.system())
-        .add_system(damage_bygone.system())
-        .add_system(damage_players.system())
-        .add_system(process_bygone_part_death.system())
-        .add_system(deactivate.system())
-        .add_system(update_game_status.system())
-        .add_system(log_battle.system().before(render_label))
-        .add_system(render.system().config(|params| {
-            params.0 = Some(Some(Mutex::new(output_sender)));
-        }).label(render_label))
-        .add_system(ready_players.system())
-        .add_system(cleanup.system())
-        .add_system(save_games.system().config(|params| {
-            params.0 = Some(Some(Mutex::new(games_sender)));
-        }))
-        .add_system(save_scoreboard.system().config(|params| {
-            params.0 = Some(Some(Mutex::new(scoreboard_sender)));
-        }))
+        .add_system(listen(Mutex::new(input_receiver)))
+        .add_system(delay_events)
+        .add_system(turn_timer)
+        .add_system(spawn_bygones)
+        .add_system(spawn_players)
+        .add_system(damage_bygone)
+        .add_system(damage_players)
+        .add_system(process_bygone_part_death)
+        .add_system(deactivate)
+        .add_system(update_game_status)
+        .add_system(log_battle.before(render_label))
+        .add_system(render(Mutex::new(output_sender)).label(render_label))
+        .add_system(ready_players)
+        .add_system(cleanup)
+        .add_system(save_games(Mutex::new(games_sender)))
+        // .add_system(save_scoreboard(Mutex::new(scoreboard_sender)))
         .run();
 
     Ok(())
