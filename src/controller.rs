@@ -42,7 +42,7 @@ pub fn process_reaction(
 
     if let ReactionType::Unicode { name } = &reaction.emoji {
         if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
-            if let Some(guild) = reaction.guild_id {
+            if let Some(_guild) = reaction.guild_id {
                 let user_name = PlayerName(
                     match &reaction.member {
                         Some(member) => match &member.nick {

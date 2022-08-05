@@ -12,42 +12,38 @@ mod localization;
 mod systems;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap},
     env,
     error::Error,
-    fs,
-    sync::{Arc, Mutex},
+    sync::{Mutex},
     time::Duration,
 };
 
 use bevy_turborand::RngPlugin;
 use clap::Parser;
-use command_parser::is_game_starting;
+
 use discord_client::DiscordClient;
 use io::{read_json, write_json_from_channel};
 
-use components::PlayerName;
-use events::{EventsPlugin, GameStartEvent, InputEvent, PlayerAttackEvent};
-use futures::stream::StreamExt;
-use game_helpers::{EventDelay, Game, GameRenderMessage};
-use localization::{Localization, Localizations};
-use std::sync::mpsc::{self, Sender};
+
+use events::{EventsPlugin};
+
+use game_helpers::{EventDelay, Game};
+
+use std::sync::mpsc::{self};
 
 use crate::cli::Cli;
-use crate::{command_parser::BYGONE_PARTS_FROM_EMOJI_NAME, systems::*};
+use crate::{systems::*};
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 
-use twilight_gateway::{cluster::Cluster, Event};
-use twilight_http::{request::channel::reaction::RequestReactionType, Client as HttpClient};
+
+
 use twilight_model::{
-    channel::{Reaction, ReactionType},
-    gateway::{payload::incoming::MessageCreate, Intents},
     id::{
-        marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker},
+        marker::{GuildMarker},
         Id,
     },
-    user::CurrentUser,
 };
 
 #[tokio::main]
