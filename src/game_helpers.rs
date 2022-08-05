@@ -7,6 +7,10 @@ use twilight_model::{channel::embed::Embed, id::{Id, marker::GuildMarker}};
 
 use crate::localization::Localization;
 
+const fn div_ceil(a: u64, b: u64) -> u64 {
+    (a + b - 1) / b
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct EventDelay(pub Duration);
 
@@ -15,17 +19,23 @@ pub struct GameTimer {
     start: Instant,
     enemy_attacked: bool,
     turn_ended: bool,
+    progress_bar_ticks: u64,
 }
 
 impl GameTimer {
-    const TURN_DURATION: Duration = Duration::from_secs(10);
-    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(9500);
+    const TURN_DURATION_SECONDS: u64 = 10;
+    const PROGRESS_BAR_TICKS_COUNT: u64 = 5;
+    const PROGRESS_BAR_TICK_DURATION_SECS: u64 = div_ceil(Self::TURN_DURATION_SECONDS, Self::PROGRESS_BAR_TICKS_COUNT);
+
+    const TURN_DURATION: Duration = Duration::from_secs(Self::TURN_DURATION_SECONDS);
+    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(Self::TURN_DURATION_SECONDS*1000 - 500);
 
     pub fn new() -> Self {
         Self {
             start: Instant::now(),
             enemy_attacked: false,
             turn_ended: false,
+            progress_bar_ticks: 0,
         }
     }
 
@@ -48,6 +58,23 @@ impl GameTimer {
         } else {
             self.turn_ended = true;
             true
+        }
+    }
+
+    pub fn progress_bar_tick(&mut self) -> Option<f32> {
+        if self.turn_ended && self.progress_bar_ticks < Self::PROGRESS_BAR_TICKS_COUNT {
+            self.progress_bar_ticks = Self::PROGRESS_BAR_TICKS_COUNT;
+            Some(1.0)
+        } else {
+            let next_tick = Self::PROGRESS_BAR_TICK_DURATION_SECS * (self.progress_bar_ticks + 1);
+            let cur_progress = self.start.elapsed().as_secs();
+
+            if cur_progress > next_tick {
+                self.progress_bar_ticks = cur_progress / Self::PROGRESS_BAR_TICK_DURATION_SECS;
+                Some(cur_progress as f32 / Self::TURN_DURATION_SECONDS as f32)
+            } else {
+                None
+            }
         }
     }
 }
