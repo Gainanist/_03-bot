@@ -1,18 +1,20 @@
-use bevy_turborand::RngComponent;
+use bevy_turborand::{GlobalRng};
 
 
-fn choose<'a, T>(rng: &mut RngComponent, items: &'a [T]) -> Option<&'a T> {
-    if items.len() == 0 {
-        None
-    } else {
-        Some(&items[rng.usize(items.len())])
+pub trait Dice {
+    fn d100(&mut self) -> isize;
+}
+
+impl Dice for GlobalRng {
+    fn d100(&mut self) -> isize {
+        self.isize(0..100)
     }
 }
 
-fn choose_mut<'a, T>(rng: &mut RngComponent, items: &'a mut [T]) -> Option<&'a mut T> {
+pub fn choose_mut<'a, T>(rng: &mut GlobalRng, items: &'a mut [T]) -> Option<&'a mut T> {
     if items.len() == 0 {
         None
     } else {
-        Some(&mut items[rng.usize(items.len())])
+        Some(&mut items[rng.usize(0..items.len())])
     }
 }

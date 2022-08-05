@@ -3,7 +3,7 @@ use std::{time::{Duration, Instant, SystemTime}, path::PathBuf, env, ops::Sub};
 use arrayvec::ArrayVec;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
-use twilight_model::{channel::embed::Embed, id::ChannelId};
+use twilight_model::{channel::embed::Embed, id::{Id, marker::GuildMarker}};
 
 use crate::localization::Localization;
 
@@ -124,15 +124,15 @@ impl GameEmbeds {
 
 #[derive(Clone, Debug)]
 pub struct GameRenderMessage {
-    pub channel_id: ChannelId,
+    pub guild_id: Id<GuildMarker>,
     pub game_id: GameId,
     pub embeds: GameEmbeds,
 }
 
 impl GameRenderMessage {
-    pub fn new(channel_id: ChannelId, game_id: GameId) -> Self {
+    pub fn new(guild_id: Id<GuildMarker>, game_id: GameId) -> Self {
         Self {
-            channel_id,
+            guild_id,
             game_id,
             embeds: GameEmbeds::new(),
         }

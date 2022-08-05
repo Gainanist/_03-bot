@@ -4,6 +4,7 @@ use bevy::{prelude::*};
 use bevy_turborand::GlobalRng;
 use enum_map::{enum_map, EnumMap};
 use rand::{Rng};
+use twilight_model::id::{marker::{GuildMarker, UserMarker}, Id};
 
 use crate::{components::*};
 
@@ -15,7 +16,6 @@ pub struct Bygone03Bundle {
     guild: GuildIdComponent,
     parts: BygoneParts,
     attack: Attack,
-    attack_dice: AttackDice,
     stage: Bygone03Stage,
     _enemy: Enemy,
     _active: Active,
@@ -27,31 +27,29 @@ impl Bygone03Bundle {
         max_parts_health: usize,
         min_attack: usize,
         max_attack: usize,
-        guild: GuildIdComponent,
+        guild: Id<GuildMarker>,
         rng: &mut GlobalRng,
     ) -> Self {
         let parts = BygoneParts(enum_map! {
-            BygonePart::Core => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 80),
-            BygonePart::Sensor => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 70),
-            BygonePart::Gun => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 50),
-            BygonePart::LeftWing => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 30),
-            BygonePart::RightWing => Vitality::new(rng.gen_range(min_parts_health..=max_parts_health), 30),
+            BygonePart::Core => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 80),
+            BygonePart::Sensor => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 70),
+            BygonePart::Gun => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 50),
+            BygonePart::LeftWing => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 30),
+            BygonePart::RightWing => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 30),
         });
-        let attack = Attack::new(rng.gen_range(min_attack..=max_attack), 100);
-        let attack_dice = AttackDice::new_d100(rng);
+        let attack = Attack::new(rng.usize(min_attack..=max_attack), 100);
     
         Self {
-            guild,
+            guild: GuildIdComponent(guild),
             parts,
             attack,
-            attack_dice,
             stage: Bygone03Stage::Armored,
             _enemy: Enemy,
             _active: Active,
         }
     }
 
-    pub fn with_normal_health(guild: GuildIdComponent, rng: &mut GlobalRng) -> Self {
+    pub fn with_normal_health(guild: Id<GuildMarker>, rng: &mut GlobalRng) -> Self {
         Self::new(1, 3, 1, 3, guild, rng)
     }
 }
@@ -69,13 +67,13 @@ pub struct PlayerBundle {
 }
 
 impl PlayerBundle {
-    pub fn new(user_id: UserIdComponent, name: PlayerName, guild: GuildIdComponent) -> Self {
+    pub fn new(user_id: Id<UserMarker>, name: PlayerName, guild: Id<GuildMarker>) -> Self {
         Self {
-            user_id,
+            user_id: UserIdComponent(user_id),
             name,
-            guild,
-            vitality: Vitality::new(6, 50),
-            attack: Attack::new(1, 50),
+            guild: GuildIdComponent(guild),
+            vitality: Vitality::new(6, 100),
+            attack: Attack::new(1, 0),
             _player: Player,
             _active: Active,
             _ready: Ready,

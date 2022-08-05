@@ -57,7 +57,7 @@ impl EnemyAttackEvent {
 pub struct GameStartEvent {
     pub initial_player: Id<UserMarker>,
     pub initial_player_name: PlayerName,
-    pub channel: Id<GuildMarker>,
+    pub guild: Id<GuildMarker>,
     pub localization: Localization,
 }
 
@@ -65,13 +65,13 @@ impl GameStartEvent {
     pub fn new(
         initial_player: Id<UserMarker>,
         initial_player_name: PlayerName,
-        channel: Id<GuildMarker>,
+        guild: Id<GuildMarker>,
         localization: Localization,
     ) -> Self {
         Self {
             initial_player,
             initial_player_name,
-            channel,
+            guild,
             localization,
         }
     }
@@ -79,26 +79,26 @@ impl GameStartEvent {
 
 #[derive(Clone, Copy, Debug)]
 pub struct GameDrawEvent {
-    pub channel_id: Id<GuildMarker>,
+    pub guild_id: Id<GuildMarker>,
 }
 
 impl GameDrawEvent {
-    pub fn new(channel_id: Id<GuildMarker>) -> Self {
+    pub fn new(guild_id: Id<GuildMarker>) -> Self {
         Self {
-            channel_id,
+            guild_id,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct TurnEndEvent {
-    pub channel_id: Id<GuildMarker>,
+    pub guild_id: Id<GuildMarker>,
 }
 
 impl TurnEndEvent {
-    pub fn new(channel_id: Id<GuildMarker>) -> Self {
+    pub fn new(guild_id: Id<GuildMarker>) -> Self {
         Self {
-            channel_id,
+            guild_id,
         }
     }
 }
@@ -107,15 +107,15 @@ impl TurnEndEvent {
 pub struct PlayerJoinEvent {
     pub player: Id<UserMarker>,
     pub player_name: PlayerName,
-    pub channel: Id<GuildMarker>,
+    pub guild: Id<GuildMarker>,
 }
 
 impl PlayerJoinEvent {
-    pub fn new(player: Id<UserMarker>, player_name: PlayerName, channel: Id<GuildMarker>) -> Self {
+    pub fn new(player: Id<UserMarker>, player_name: PlayerName, guild: Id<GuildMarker>) -> Self {
         Self {
             player,
             player_name,
-            channel,
+            guild,
         }
     }
 }

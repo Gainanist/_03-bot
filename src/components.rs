@@ -82,7 +82,7 @@ impl Vitality {
     }
 
     pub fn take_attack(&mut self, damage: usize, accuracy: isize) -> bool {
-        if accuracy > self.dodge {
+        if accuracy >= self.dodge {
             self.health.reduce(damage);
             println!("Taking damage: {}, accuracy: {}, dodge: {}", damage, accuracy, self.dodge);
             return true;
@@ -98,27 +98,6 @@ impl RenderText for Vitality {
         } else {
             self.health.render_text(localization)
         }
-    }
-}
-
-#[derive(Clone, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Dice {
-    rng: RngComponent,
-    min: isize,
-    max: isize,
-}
-
-impl Dice {
-    pub fn new_d100(rng: &mut GlobalRng) -> Self {
-        Self {
-            rng: RngComponent::from_global(rng),
-            min: 0,
-            max: 100,
-        }
-    }
-
-    pub fn roll(&mut self) -> isize {
-        self.rng.isize(self.min..self.max)
     }
 }
 
@@ -144,8 +123,8 @@ impl Attack {
         self.accuracy += modifier
     }
 
-    pub fn attack(&self, target: &mut Vitality, dice: &mut AttackDice) -> bool {
-        target.take_attack(self.damage, self.accuracy + dice.0.roll())
+    pub fn attack(&self, target: &mut Vitality, acc_roll: isize) -> bool {
+        target.take_attack(self.damage, self.accuracy + acc_roll)
     }
 }
 
@@ -154,9 +133,6 @@ impl RenderText for Attack {
         format!("{} {}, {}%", localization.attack, self.damage, self.accuracy)
     }
 }
-
-#[derive(Clone, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct AttackDice(pub Dice);
 
 #[derive(Clone, Copy, Component, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum BygonePart {
