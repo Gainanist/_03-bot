@@ -36,18 +36,10 @@ use twilight_model::{gateway::{Intents, payload::incoming::{MessageCreate}}, id:
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
 
-    // This is the default scheme. It will automatically create as many
-    // shards as is suggested by Discord.
-    let scheme = ShardScheme::Auto;
-
-    // Use intents to only receive guild message events.
-    let (cluster, mut events) = Cluster::builder(
+    let (cluster, mut events) = Cluster::new(
         token.to_owned(),
         Intents::GUILD_MESSAGES | Intents::GUILD_MESSAGE_REACTIONS
-    )
-        .shard_scheme(scheme)
-        .build()
-        .await?;
+    ).await?;
     let cluster = Arc::new(cluster);
 
     // Start up the cluster.
@@ -161,7 +153,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let cli = Cli::parse();
     let games = read_json::<HashMap::<Id<GuildMarker>, Game>>(&cli.games_path);
-    let scoreboard = read_json::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>(&cli.scoreboard_path);
+    // let scoreboard = read_json::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>(&cli.scoreboard_path);
 
     let (games_sender, games_receiver) = mpsc::channel::<HashMap::<Id<GuildMarker>, Game>>();
     let games_path = cli.games_path.clone();
@@ -187,8 +179,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
         .insert_resource(EventDelay(Duration::from_millis(150)))
         .insert_resource(games)
-        .insert_resource(scoreboard)
-        .insert_resource(HashMap::<Id<ChannelMarker>, Vec<String>>::new())
+        // .insert_resource(scoreboard)
+        .insert_resource(HashMap::<Id<GuildMarker>, Vec<String>>::new())
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_plugin(EventsPlugin::default())
@@ -283,8 +275,8 @@ async fn send_game_message(
     match message_id {
         Some(message_id) => {
             http.update_message(channel_id, *message_id)
-                .embeds(&[])?
-                .embeds(&msg.embeds.render())?
+                .embeds(None)?
+                .embeds(Some(&msg.embeds.render()))?
                 .exec()
                 .await?;
             Ok(*message_id)

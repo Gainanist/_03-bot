@@ -2,7 +2,7 @@ use std::{sync::{mpsc::{Receiver, Sender}, Mutex}, collections::{HashMap, VecDeq
 
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
-use twilight_embed_builder::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
+use twilight_util::builder::embed::{EmbedBuilder, ImageSource, EmbedFieldBuilder};
 use twilight_model::id::{Id, marker::{GuildMarker}};
 
 use crate::{
@@ -398,16 +398,13 @@ pub fn render(sender: Mutex<Sender<GameRenderMessage>>) -> impl FnMut(
                                 "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif"
                             ).unwrap()
                         )
-                        .build()
-                        .unwrap(),
+                        .build(),
                     GameStatus::Won => EmbedBuilder::new()
                         .description(&loc.won)
-                        .build()
-                        .unwrap(),
+                        .build(),
                     GameStatus::Lost => EmbedBuilder::new()
                         .description(&loc.lost)
-                        .build()
-                        .unwrap(),
+                        .build(),
                 });
                 if game.status == GameStatus::Ongoing {
                     for (enemy_guild_id, BygoneParts(parts), attack, stage) in enemies.iter() {
@@ -431,7 +428,6 @@ pub fn render(sender: Mutex<Sender<GameRenderMessage>>) -> impl FnMut(
                                 .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
                                 .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
                                 .build()
-                                .unwrap()
                         );
                     }
 
@@ -440,7 +436,6 @@ pub fn render(sender: Mutex<Sender<GameRenderMessage>>) -> impl FnMut(
                         message.embeds.log = Some(EmbedBuilder::new()
                             .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
                             .build()
-                            .unwrap()
                         );
                     }
 
@@ -454,7 +449,7 @@ pub fn render(sender: Mutex<Sender<GameRenderMessage>>) -> impl FnMut(
                             vitality.health().render_text(loc)
                         ));
                     }
-                    let players_embed = players_embed_builder.build().unwrap();
+                    let players_embed = players_embed_builder.build();
                     if players_embed.fields.len() > 0 {
                         message.embeds.players = Some(players_embed);
                     }

@@ -30,12 +30,13 @@ impl Bygone03Bundle {
         guild: Id<GuildMarker>,
         rng: &mut GlobalRng,
     ) -> Self {
+        let wings_hp = rng.usize(min_parts_health..=max_parts_health);
         let parts = BygoneParts(enum_map! {
             BygonePart::Core => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 80),
             BygonePart::Sensor => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 70),
             BygonePart::Gun => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 50),
-            BygonePart::LeftWing => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 30),
-            BygonePart::RightWing => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 30),
+            BygonePart::LeftWing => Vitality::new(wings_hp, 30),
+            BygonePart::RightWing => Vitality::new(wings_hp, 30),
         });
         let attack = Attack::new(rng.usize(min_attack..=max_attack), 100);
     

@@ -9,7 +9,7 @@ pub struct Cli {
     #[clap(short, long, value_parser, value_name = "FILE")]
     pub games_path: PathBuf,
 
-    /// Scoreboard file
-    #[clap(short, long, value_parser, value_name = "FILE")]
-    pub scoreboard_path: PathBuf,
+    // /// Scoreboard file
+    // #[clap(short, long, value_parser, value_name = "FILE")]
+    // pub scoreboard_path: PathBuf,
 }
