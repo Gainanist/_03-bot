@@ -39,7 +39,7 @@ impl DiscordClient {
     pub async fn new(token: String) -> Result<(Self, Events), ClusterStartError> {
         let (cluster, events) = Cluster::new(
             token.to_owned(),
-            Intents::GUILD_MESSAGES | Intents::GUILD_MESSAGE_REACTIONS,
+            Intents::GUILD_MESSAGES | Intents::GUILD_MESSAGE_REACTIONS | Intents::MESSAGE_CONTENT,
         )
         .await?;
         let cluster = Arc::new(cluster);
@@ -91,6 +91,7 @@ impl DiscordClient {
                         if let Some(guild_id) = msg.guild_id {
                             if msg.author.id != me.id {
                                 if let Some(language) = is_game_starting(&msg.content) {
+                                    println!("Starting game in guild {}", guild_id);
                                     let localization = localizations.get(language).clone();
                                     start_game(&input_sender, localization, &msg);
                                     if let Ok(mut game_channel_ids_input_lock) =
@@ -99,8 +100,14 @@ impl DiscordClient {
                                         game_channel_ids_input_lock
                                             .insert(guild_id, msg.channel_id);
                                     }
+                                } else {
+                                    println!("Failed to start game: wrong user intent, channel: {}", msg.channel_id);
                                 }
+                            } else {
+                                println!("Failed to start game: message author is self, channel: {}", msg.channel_id);
                             }
+                        } else {
+                            println!("Failed to start game: empty guild_id, channel: {}", msg.channel_id);
                         }
                     }
                     Event::ReactionAdd(reaction) => {

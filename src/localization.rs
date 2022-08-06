@@ -174,12 +174,12 @@ impl Localizations {
             ],
             player_miss: vec![
                 LocalizedLine("*{PLAYER_NAME}* misses".to_string()),
-                LocalizedLine("*{PLAYER_NAME}* fights with a drunken style".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* fights in a drunken style".to_string()),
                 LocalizedLine("*{PLAYER_NAME}* gets distracted by a silhouette in the window".to_string()),
             ],
             player_hit: vec![
                 LocalizedLine("*{PLAYER_NAME}* hits the *{BYGONE03_PART_NAME}*".to_string()),
-                LocalizedLine("*{PLAYER_NAME}* smashes the *{BYGONE03_PART_NAME}* using their small catapult".to_string()),
+                LocalizedLine("*{PLAYER_NAME}* smashes the *{BYGONE03_PART_NAME}* with their small catapult".to_string()),
                 LocalizedLine("*{PLAYER_NAME}* damages the *{BYGONE03_PART_NAME}*".to_string()),
             ],
             player_dead: vec![
