@@ -12,7 +12,7 @@ use twilight_model::{
         marker::{ChannelMarker, MessageMarker},
         Id,
     },
-    user::CurrentUser, application::{component::{ActionRow, Component, Button, button::ButtonStyle}, interaction::Interaction},
+    user::{CurrentUser, User}, application::{component::{ActionRow, Component, Button, button::ButtonStyle}, interaction::{Interaction, InteractionData, message_component::MessageComponentInteractionData}}, guild::PartialMember,
 };
 
 use crate::{
@@ -23,88 +23,30 @@ use crate::{
     localization::Localization,
 };
 
-pub fn process_reaction(
-    reaction: &Reaction,
-    sender: &Sender<InputEvent>,
-    current_user: &CurrentUser,
-    game_message_ids: &Mutex<HashSet<Id<MessageMarker>>>,
-) {
-    if reaction.user_id == current_user.id {
-        return;
-    }
-    if let Ok(game_message_ids_lock) = game_message_ids.lock() {
-        if !game_message_ids_lock.contains(&reaction.message_id) {
-            return;
-        }
-    } else {
-        return;
-    }
+pub fn process_interaction(interaction: Interaction) -> Option<InputEvent> {
+    if let (
+        Some(InteractionData::MessageComponent(MessageComponentInteractionData { custom_id: emoji_name, .. })),
+        Some(PartialMember { user: Some(user), nick: user_nick, .. }),
+        Some(guild_id),
+    ) = (interaction.data, interaction.member, interaction.guild_id) {
+        if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(&emoji_name) {
+            let user_name = PlayerName(
+                match &user_nick {
+                    Some(nick) => nick,
+                    None => &user.name,
+                }
+                .to_string(),
+            );
 
-    if let ReactionType::Unicode { name } = &reaction.emoji {
-        if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
-            if let Some(_guild) = reaction.guild_id {
-                let user_name = PlayerName(
-                    match &reaction.member {
-                        Some(member) => match &member.nick {
-                            Some(nick) => nick,
-                            None => &member.user.name,
-                        },
-                        None => "Anon",
-                    }
-                    .to_string(),
-                );
-
-                sender.send(InputEvent::PlayerAttack(PlayerAttackEvent::new(
-                    reaction.user_id,
-                    user_name,
-                    reaction.guild_id.unwrap(),
-                    *bygone_part,
-                )));
-            }
+            return Some(InputEvent::PlayerAttack(PlayerAttackEvent::new(
+                user.id,
+                user_name,
+                guild_id,
+                *bygone_part,
+            )));
         }
     }
-}
-
-pub fn process_button(
-    interaction: &Interaction,
-    sender: &Sender<InputEvent>,
-    current_user: &CurrentUser,
-    game_message_ids: &Mutex<HashSet<Id<MessageMarker>>>,
-) {
-    if interaction.user_id == current_user.id {
-        return;
-    }
-    if let Ok(game_message_ids_lock) = game_message_ids.lock() {
-        if !game_message_ids_lock.contains(&reaction.message_id) {
-            return;
-        }
-    } else {
-        return;
-    }
-
-    if let ReactionType::Unicode { name } = &reaction.emoji {
-        if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
-            if let Some(_guild) = reaction.guild_id {
-                let user_name = PlayerName(
-                    match &reaction.member {
-                        Some(member) => match &member.nick {
-                            Some(nick) => nick,
-                            None => &member.user.name,
-                        },
-                        None => "Anon",
-                    }
-                    .to_string(),
-                );
-
-                sender.send(InputEvent::PlayerAttack(PlayerAttackEvent::new(
-                    reaction.user_id,
-                    user_name,
-                    reaction.guild_id.unwrap(),
-                    *bygone_part,
-                )));
-            }
-        }
-    }
+    return None;
 }
 
 pub fn start_game(sender: &Sender<InputEvent>, localization: Localization, msg: &MessageCreate) {
@@ -164,15 +106,6 @@ pub async fn send_game_message(
                 .model()
                 .await?
                 .id;
-            for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
-                http.create_reaction(
-                    channel_id,
-                    message_id,
-                    &RequestReactionType::Unicode { name: emoji_name },
-                )
-                .exec()
-                .await?;
-            }
             Ok(message_id)
         }
     }

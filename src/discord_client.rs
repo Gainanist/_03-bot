@@ -15,14 +15,14 @@ use twilight_gateway::{
     Cluster, Event, Intents,
 };
 use twilight_http::Client as HttpClient;
-use twilight_model::id::{
+use twilight_model::{id::{
     marker::{ChannelMarker, GuildMarker, MessageMarker},
     Id,
-};
+}, application::{interaction::InteractionType, component::{button::ButtonStyle, Component, Button, ActionRow}}, channel::ReactionType, http::interaction::{InteractionResponse, InteractionResponseType}};
 
 use crate::{
-    command_parser::is_game_starting,
-    controller::{process_reaction, send_game_message, start_game},
+    command_parser::{is_game_starting, BYGONE_PARTS_FROM_EMOJI_NAME},
+    controller::{send_game_message, start_game, process_interaction},
     events::InputEvent,
     game_helpers::GameRenderMessage,
     localization::Localizations,
@@ -39,7 +39,7 @@ impl DiscordClient {
     pub async fn new(token: String) -> Result<(Self, Events), ClusterStartError> {
         let (cluster, events) = Cluster::new(
             token.to_owned(),
-            Intents::GUILD_MESSAGES | Intents::GUILD_MESSAGE_REACTIONS | Intents::MESSAGE_CONTENT,
+            Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT,
         )
         .await?;
         let cluster = Arc::new(cluster);
@@ -73,9 +73,10 @@ impl DiscordClient {
         &self,
         mut events: Events,
     ) -> Result<Receiver<InputEvent>, Box<dyn Error + Send + Sync>> {
-        let game_message_ids_input = Arc::clone(&self.game_message_ids);
         let game_channel_ids_input = Arc::clone(&self.game_channel_ids);
+        let http = Arc::clone(&self.http);
         let me = self.http.current_user().exec().await?.model().await?;
+        let app_id = self.http.current_user_application().exec().await?.model().await?.id;
         let (input_sender, input_receiver) = mpsc::channel();
 
         tokio::spawn(async move {
@@ -110,27 +111,26 @@ impl DiscordClient {
                             println!("Failed to start game: empty guild_id, channel: {}", msg.channel_id);
                         }
                     }
-                    Event::ReactionAdd(reaction) => {
-                        println!(
-                            "Received ReactionAdd event from channel {}",
-                            reaction.channel_id
-                        );
-
-                        process_reaction(&reaction.0, &input_sender, &me, &game_message_ids_input)
-                    }
-                    Event::ReactionRemove(reaction) => {
-                        println!(
-                            "Received ReactionRemove event from channel {}",
-                            reaction.channel_id
-                        );
-
-                        process_reaction(&reaction.0, &input_sender, &me, &game_message_ids_input)
-                    }
                     Event::ShardConnected(_) => {
                         println!("Connected on shard {}", shard_id);
                     }
                     Event::InteractionCreate(interaction) => {
                         println!("Received InteractionCreate event");
+                        let response = InteractionResponse {
+                            kind: InteractionResponseType::DeferredUpdateMessage,
+                            data: None,
+                        };
+                        http.interaction(app_id)
+                            .create_response(
+                                interaction.id,
+                                &interaction.token,
+                                &response,
+                            )
+                            .exec()
+                            .await.unwrap();
+                        if let Some(ev) = process_interaction(interaction.0) {
+                            input_sender.send(ev);
+                        }
                     }
                     _ => {}
                 }
