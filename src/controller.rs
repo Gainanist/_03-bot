@@ -12,7 +12,7 @@ use twilight_model::{
         marker::{ChannelMarker, MessageMarker},
         Id,
     },
-    user::CurrentUser,
+    user::CurrentUser, application::{component::{ActionRow, Component, Button, button::ButtonStyle}, interaction::Interaction},
 };
 
 use crate::{
@@ -30,6 +30,48 @@ pub fn process_reaction(
     game_message_ids: &Mutex<HashSet<Id<MessageMarker>>>,
 ) {
     if reaction.user_id == current_user.id {
+        return;
+    }
+    if let Ok(game_message_ids_lock) = game_message_ids.lock() {
+        if !game_message_ids_lock.contains(&reaction.message_id) {
+            return;
+        }
+    } else {
+        return;
+    }
+
+    if let ReactionType::Unicode { name } = &reaction.emoji {
+        if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(name) {
+            if let Some(_guild) = reaction.guild_id {
+                let user_name = PlayerName(
+                    match &reaction.member {
+                        Some(member) => match &member.nick {
+                            Some(nick) => nick,
+                            None => &member.user.name,
+                        },
+                        None => "Anon",
+                    }
+                    .to_string(),
+                );
+
+                sender.send(InputEvent::PlayerAttack(PlayerAttackEvent::new(
+                    reaction.user_id,
+                    user_name,
+                    reaction.guild_id.unwrap(),
+                    *bygone_part,
+                )));
+            }
+        }
+    }
+}
+
+pub fn process_button(
+    interaction: &Interaction,
+    sender: &Sender<InputEvent>,
+    current_user: &CurrentUser,
+    game_message_ids: &Mutex<HashSet<Id<MessageMarker>>>,
+) {
+    if interaction.user_id == current_user.id {
         return;
     }
     if let Ok(game_message_ids_lock) = game_message_ids.lock() {
@@ -102,9 +144,21 @@ pub async fn send_game_message(
             Ok(*message_id)
         }
         None => {
+            let mut action_row = ActionRow{ components: Vec::with_capacity(5) };
+            for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
+                action_row.components.push(Component::Button(Button {
+                    custom_id: Some((*emoji_name).to_owned()),
+                    disabled: false,
+                    emoji: Some(ReactionType::Unicode { name: (*emoji_name).to_owned() }),
+                    label: None,
+                    style: ButtonStyle::Secondary,
+                    url: None,
+                }));
+            }
             let message_id = http
                 .create_message(channel_id)
                 .embeds(&msg.embeds.render())?
+                .components(&[Component::ActionRow(action_row)])?
                 .exec()
                 .await?
                 .model()

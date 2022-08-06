@@ -129,6 +129,9 @@ impl DiscordClient {
                     Event::ShardConnected(_) => {
                         println!("Connected on shard {}", shard_id);
                     }
+                    Event::InteractionCreate(interaction) => {
+                        println!("Received InteractionCreate event");
+                    }
                     _ => {}
                 }
             }
