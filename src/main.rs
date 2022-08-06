@@ -12,10 +12,10 @@ mod localization;
 mod systems;
 
 use std::{
-    collections::{HashMap},
+    collections::HashMap,
     env,
     error::Error,
-    sync::{Mutex},
+    sync::Mutex,
     time::Duration,
 };
 
@@ -25,20 +25,20 @@ use clap::Parser;
 use discord_client::DiscordClient;
 use io::{read_json, write_json_from_channel};
 
-use events::{EventsPlugin};
+use events::EventsPlugin;
 
 use game_helpers::{EventDelay, Game};
 
-use std::sync::mpsc::{self};
+use std::sync::mpsc;
 
 use crate::cli::Cli;
-use crate::{systems::*};
+use crate::systems::*;
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 
 use twilight_model::{
     id::{
-        marker::{GuildMarker},
+        marker::GuildMarker,
         Id,
     },
 };
