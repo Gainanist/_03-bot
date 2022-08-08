@@ -72,41 +72,79 @@ pub fn start_game(sender: &Sender<InputEvent>, localization: Localization, msg: 
 
 pub async fn send_game_message(
     http: &Client,
-    message_id: Option<&Id<MessageMarker>>,
+    message_id: Option<&(Id<MessageMarker>, Id<MessageMarker>)>,
     msg: GameRenderMessage,
     channel_id: Id<ChannelMarker>,
-) -> Result<Id<MessageMarker>, Box<dyn Error + Send + Sync>> {
+) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
+    let embeds = msg.embeds;
     match message_id {
-        Some(message_id) => {
-            http.update_message(channel_id, *message_id)
-                .embeds(None)?
-                .embeds(Some(&msg.embeds.render()))?
-                .exec()
-                .await?;
-            Ok(*message_id)
+        Some((upper_message_id, lower_message_id)) => {
+            let mut deleted = false;
+            if embeds.upper_embeds.len() > 0 {
+                let mut update_message = http.update_message(channel_id, *upper_message_id)
+                    .embeds(None)?
+                    .embeds(Some(&embeds.upper_embeds))?
+                    .components(None)?;
+                if embeds.controls.len() > 0 {
+                    update_message = update_message.components(Some(&embeds.controls))?;
+                }
+                update_message.components(None)?.exec().await?;
+            } else {
+                http.delete_message(channel_id, *upper_message_id).exec().await?;
+                deleted = true;
+            }
+
+            if embeds.lower_embeds.len() > 0 {
+                http.update_message(channel_id, *lower_message_id)
+                    .embeds(None)?
+                    .embeds(Some(&embeds.lower_embeds))?
+                    .exec()
+                    .await?;
+            } else {
+                http.delete_message(channel_id, *lower_message_id).exec().await?;
+                deleted = true;
+            }
+
+            if deleted {
+                Ok(None)
+            } else {
+                Ok(Some((*upper_message_id, *lower_message_id)))
+            }
         }
         None => {
-            let mut action_row = ActionRow{ components: Vec::with_capacity(5) };
-            for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
-                action_row.components.push(Component::Button(Button {
-                    custom_id: Some((*emoji_name).to_owned()),
-                    disabled: false,
-                    emoji: Some(ReactionType::Unicode { name: (*emoji_name).to_owned() }),
-                    label: None,
-                    style: ButtonStyle::Secondary,
-                    url: None,
-                }));
+            let upper_message_id = None;
+            if embeds.upper_embeds.len() > 0 {
+                let mut upper_message = http
+                    .create_message(channel_id)
+                    .embeds(&embeds.upper_embeds)?;
+                if embeds.controls.len() > 0 {
+                    upper_message = upper_message.components(&embeds.controls)?;
+                }
+                upper_message_id = Some(upper_message
+                    .exec()
+                    .await?
+                    .model()
+                    .await?
+                    .id
+                );
             }
-            let message_id = http
-                .create_message(channel_id)
-                .embeds(&msg.embeds.render())?
-                .components(&[Component::ActionRow(action_row)])?
-                .exec()
-                .await?
-                .model()
-                .await?
-                .id;
-            Ok(message_id)
+            let lower_message_id = None;
+            if embeds.lower_embeds.len() > 0 {
+                lower_message_id = Some(http
+                    .create_message(channel_id)
+                    .embeds(&embeds.lower_embeds)?
+                    .exec()
+                    .await?
+                    .model()
+                    .await?
+                    .id
+                );
+            }
+            if (Some(upper_message_id), Some(lower_message_id)) - (upper_message_id, lower_message_id) {
+                Ok((upper_message_id, lower_message_id))
+            } else {
+                Ok(None)
+            }
         }
     }
 }

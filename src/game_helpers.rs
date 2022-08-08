@@ -7,7 +7,7 @@ use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use twilight_model::{
     channel::embed::Embed,
-    id::{marker::GuildMarker, Id},
+    id::{marker::GuildMarker, Id}, application::component::{Component, ActionRow},
 };
 
 use crate::localization::Localization;
@@ -97,33 +97,64 @@ impl Game {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct GameEmbeds {
+pub struct GameEmbedsBuilder {
     pub title: Option<Embed>,
     pub enemies: Option<Embed>,
     pub log: Option<Embed>,
     pub players: Option<Embed>,
+    pub controls: Vec<Component>,
 }
 
-impl GameEmbeds {
-    pub fn new() -> Self {
+impl GameEmbedsBuilder {
+    fn new() -> Self {
         Self::default()
     }
 
-    pub fn render(self) -> ArrayVec<Embed, 4> {
-        let mut embeds = ArrayVec::new();
-        if let Some(title) = self.title {
-            embeds.push(title);
-        }
-        if let Some(enemies) = self.enemies {
-            embeds.push(enemies);
-        }
-        if let Some(log) = self.log {
-            embeds.push(log);
-        }
-        if let Some(players) = self.players {
-            embeds.push(players);
+    pub fn build(self, finished: bool) -> GameEmbeds {
+        let mut embeds = GameEmbeds::new();
+        if !finished {
+            if let Some(title) = self.title {
+                embeds.upper_embeds.push(title);
+            }
+            if let Some(enemies) = self.enemies {
+                embeds.upper_embeds.push(enemies);
+            }
+
+            if self.controls.len() > 0 {
+                embeds.controls.push(
+                    Component::ActionRow(ActionRow { components: self.controls  })
+                );
+            }
+
+            if let Some(log) = self.log {
+                embeds.lower_embeds.push(log);
+            }
+            if let Some(players) = self.players {
+                embeds.lower_embeds.push(players);
+            }
+        } else {
+            if let Some(title) = self.title {
+                embeds.lower_embeds.push(title);
+            }
         }
         embeds
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct GameEmbeds {
+    pub upper_embeds: ArrayVec<Embed, 2>,
+    pub controls: ArrayVec<Component, 1>,
+    pub lower_embeds: ArrayVec<Embed, 2>,
+}
+
+impl GameEmbeds {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn builder() -> GameEmbedsBuilder {
+        GameEmbedsBuilder::new()
     }
 }
 
@@ -135,11 +166,11 @@ pub struct GameRenderMessage {
 }
 
 impl GameRenderMessage {
-    pub fn new(guild_id: Id<GuildMarker>, game_id: GameId) -> Self {
+    pub fn new(guild_id: Id<GuildMarker>, game_id: GameId, embeds: GameEmbeds) -> Self {
         Self {
             guild_id,
             game_id,
-            embeds: GameEmbeds::new(),
+            embeds,
         }
     }
 }

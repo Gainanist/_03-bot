@@ -5,7 +5,7 @@ use std::{
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use futures::stream::StreamExt;
@@ -31,7 +31,7 @@ use crate::{
 pub struct DiscordClient {
     cluster: Arc<Cluster>,
     http: Arc<HttpClient>,
-    game_message_ids: Arc<Mutex<HashSet<Id<MessageMarker>>>>,
+    http_clone: Arc<HttpClient>,
     game_channel_ids: Arc<Mutex<HashMap<Id<GuildMarker>, Id<ChannelMarker>>>>,
 }
 
@@ -44,9 +44,9 @@ impl DiscordClient {
         .await?;
         let cluster = Arc::new(cluster);
 
+        let http_clone = Arc::new(HttpClient::new(token.to_owned()));
         let http = Arc::new(HttpClient::new(token));
 
-        let game_message_ids = Arc::new(Mutex::new(HashSet::<Id<MessageMarker>>::new()));
         let game_channel_ids = Arc::new(Mutex::new(
             HashMap::<Id<GuildMarker>, Id<ChannelMarker>>::new(),
         ));
@@ -55,7 +55,7 @@ impl DiscordClient {
             Self {
                 cluster,
                 http,
-                game_message_ids,
+                http_clone,
                 game_channel_ids,
             },
             events,
@@ -74,7 +74,7 @@ impl DiscordClient {
         mut events: Events,
     ) -> Result<Receiver<InputEvent>, Box<dyn Error + Send + Sync>> {
         let game_channel_ids_input = Arc::clone(&self.game_channel_ids);
-        let http = Arc::clone(&self.http);
+        let http = Arc::clone(&self.http_clone);
         let me = self.http.current_user().exec().await?.model().await?;
         let app_id = self.http.current_user_application().exec().await?.model().await?.id;
         let (input_sender, input_receiver) = mpsc::channel();
@@ -116,18 +116,21 @@ impl DiscordClient {
                     }
                     Event::InteractionCreate(interaction) => {
                         println!("Received InteractionCreate event");
+                        let http = Arc::clone(&http);
+                        let interaction_clone = interaction.clone();
                         let response = InteractionResponse {
                             kind: InteractionResponseType::DeferredUpdateMessage,
                             data: None,
                         };
-                        http.interaction(app_id)
-                            .create_response(
-                                interaction.id,
-                                &interaction.token,
-                                &response,
-                            )
-                            .exec()
-                            .await.unwrap();
+                        tokio::spawn(
+                             http.interaction(app_id)
+                                .create_response(
+                                    interaction_clone.id,
+                                    &interaction_clone.token,
+                                    &response,
+                                )
+                                .exec()
+                        );
                         if let Some(ev) = process_interaction(interaction.0) {
                             input_sender.send(ev);
                         }
@@ -141,7 +144,6 @@ impl DiscordClient {
     }
 
     pub async fn listen_game(&self) -> Sender<GameRenderMessage> {
-        let game_message_ids_output = Arc::clone(&self.game_message_ids);
         let game_channel_ids_output = Arc::clone(&self.game_channel_ids);
         let http_write = Arc::clone(&self.http);
         let (output_sender, output_receiver) = mpsc::channel::<GameRenderMessage>();
@@ -167,11 +169,10 @@ impl DiscordClient {
                                     "Successfully sent/updated a game message in channel {}",
                                     channel_id
                                 );
-                                message_ids.insert(game_id, message_id);
-                                if let Ok(mut game_message_ids_output_lock) =
-                                    game_message_ids_output.lock()
-                                {
-                                    game_message_ids_output_lock.insert(message_id);
+                                if let Some(message_id) = message_id {
+                                    message_ids.insert(game_id, message_id);
+                                } else {
+                                    message_ids.remove(&game_id);
                                 }
                             }
                             Err(err) => {

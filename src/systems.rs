@@ -10,7 +10,7 @@ use std::{
 
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
-use twilight_model::id::{marker::GuildMarker, Id};
+use twilight_model::{id::{marker::GuildMarker, Id}, application::component::{ActionRow, Component as MessageComponent, Button as MessageButton, button::ButtonStyle}, channel::ReactionType};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
 use crate::{
@@ -21,8 +21,8 @@ use crate::{
     },
     dice::{choose_mut, Dice},
     events::*,
-    game_helpers::{EventDelay, Game, GameId, GameRenderMessage, GameStatus, GameTimer},
-    localization::RenderText,
+    game_helpers::{EventDelay, Game, GameId, GameRenderMessage, GameStatus, GameTimer, GameEmbeds, GameEmbedsBuilder},
+    localization::RenderText, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME,
 };
 
 pub fn listen(
@@ -449,8 +449,8 @@ pub fn render(
         for GameDrawEvent { guild_id } in ev_game_draw.iter() {
             if let Some(game) = games.get(guild_id) {
                 let loc = &game.localization;
-                let mut message = GameRenderMessage::new(*guild_id, game.game_id);
-                message.embeds.title = Some(match game.status {
+                let mut embeds_builder = GameEmbeds::builder();
+                embeds_builder.title = Some(match game.status {
                     GameStatus::Ongoing => EmbedBuilder::new()
                         .description(&loc.title)
                         .image(
@@ -464,6 +464,7 @@ pub fn render(
                     GameStatus::Lost => EmbedBuilder::new().description(&loc.lost).build(),
                 });
                 if game.status == GameStatus::Ongoing {
+                    println!("Rendering ongoing game in guild {}", guild_id);
                     for (enemy_guild_id, BygoneParts(parts), attack, stage) in enemies.iter() {
                         if enemy_guild_id.0 != *guild_id {
                             continue;
@@ -481,7 +482,7 @@ pub fn render(
                         let right_wing = parts[BygonePart::RightWing].render_text(loc);
                         let gun = parts[BygonePart::Gun].render_text(loc);
 
-                        message.embeds.enemies = Some(
+                        embeds_builder.enemies = Some(
                             EmbedBuilder::new()
                                 .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
                                 .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
@@ -502,7 +503,7 @@ pub fn render(
                     if let Some(battle_log_lines) = battle_log.remove(guild_id) {
                         let battle_log_contents =
                             " • ".to_string() + &battle_log_lines.join("\n • ");
-                        message.embeds.log = Some(
+                            embeds_builder.log = Some(
                             EmbedBuilder::new()
                                 .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
                                 .build(),
@@ -520,11 +521,26 @@ pub fn render(
                     }
                     let players_embed = players_embed_builder.build();
                     if players_embed.fields.len() > 0 {
-                        message.embeds.players = Some(players_embed);
+                        embeds_builder.players = Some(players_embed);
                     }
+
+                    for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
+                        let component = MessageComponent::Button(MessageButton {
+                            custom_id: Some((*emoji_name).to_owned()),
+                            disabled: false,
+                            emoji: Some(ReactionType::Unicode { name: (*emoji_name).to_owned() }),
+                            label: None,
+                            style: ButtonStyle::Secondary,
+                            url: None,
+                        });
+                        embeds_builder.controls.push(component);
+                    }
+                } else {
+                    println!("Rendering finished game in guild {}", guild_id);
                 }
 
                 if let Ok(ref mut sender_lock) = sender.lock() {
+                    let message = GameRenderMessage::new(*guild_id, game.game_id, embeds_builder.build(game.status != GameStatus::Ongoing));
                     sender_lock.send(message);
                 }
             }
