@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 arrayvec = "0.7.2"
 bevy = "0.8.0"
-bevy_turborand = "0.2.0"
+bevy_turborand = "=0.2.0"
 clap = { version = "3.2.16", features = ["derive"] }
 enum-map = "1.1.1"
 futures = "0.3.17"
