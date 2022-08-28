@@ -76,75 +76,90 @@ pub async fn send_game_message(
     msg: GameRenderMessage,
     channel_id: Id<ChannelMarker>,
 ) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
-    let embeds = msg.embeds;
     match message_id {
-        Some((upper_message_id, lower_message_id)) => {
-            let mut deleted = false;
-            if embeds.upper_embeds.len() > 0 {
-                let mut update_message = http.update_message(channel_id, *upper_message_id)
-                    .embeds(None)?
-                    .embeds(Some(&embeds.upper_embeds))?
-                    .components(None)?;
-                if embeds.controls.len() > 0 {
-                    update_message = update_message.components(Some(&embeds.controls))?;
-                }
-                update_message.components(None)?.exec().await?;
-            } else {
-                http.delete_message(channel_id, *upper_message_id).exec().await?;
-                deleted = true;
-            }
+        Some((upper_message_id, lower_message_id)) =>
+            update_game_message(http, *upper_message_id, *lower_message_id, msg, channel_id).await,
+        None => create_game_message(http, msg, channel_id).await,
+    }
+}
 
-            if embeds.lower_embeds.len() > 0 {
-                http.update_message(channel_id, *lower_message_id)
-                    .embeds(None)?
-                    .embeds(Some(&embeds.lower_embeds))?
-                    .exec()
-                    .await?;
-            } else {
-                http.delete_message(channel_id, *lower_message_id).exec().await?;
-                deleted = true;
-            }
+async fn create_game_message(
+    http: &Client,
+    msg: GameRenderMessage,
+    channel_id: Id<ChannelMarker>,
+) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
+    let embeds = msg.embeds;
+    let upper_message_id = if embeds.upper_embeds.len() > 0 {
+        let mut upper_message = http
+            .create_message(channel_id)
+            .embeds(&embeds.upper_embeds)?;
+        if embeds.controls.len() > 0 {
+            upper_message = upper_message.components(&embeds.controls)?;
+        }
+        Some(upper_message
+            .exec()
+            .await?
+            .model()
+            .await?
+            .id
+        )
+    } else {
+        None
+    };
+    let lower_message_id = if embeds.lower_embeds.len() > 0 {
+        Some(http
+            .create_message(channel_id)
+            .embeds(&embeds.lower_embeds)?
+            .exec()
+            .await?
+            .model()
+            .await?
+            .id
+        )
+    } else {
+        None
+    };
+    if let (Some(upper_message_id), Some(lower_message_id)) = (upper_message_id, lower_message_id) {
+        Ok(Some((upper_message_id, lower_message_id)))
+    } else {
+        Ok(None)
+    }
+}
 
-            if deleted {
-                Ok(None)
-            } else {
-                Ok(Some((*upper_message_id, *lower_message_id)))
-            }
-        }
-        None => {
-            let upper_message_id = None;
-            if embeds.upper_embeds.len() > 0 {
-                let mut upper_message = http
-                    .create_message(channel_id)
-                    .embeds(&embeds.upper_embeds)?;
-                if embeds.controls.len() > 0 {
-                    upper_message = upper_message.components(&embeds.controls)?;
-                }
-                upper_message_id = Some(upper_message
-                    .exec()
-                    .await?
-                    .model()
-                    .await?
-                    .id
-                );
-            }
-            let lower_message_id = None;
-            if embeds.lower_embeds.len() > 0 {
-                lower_message_id = Some(http
-                    .create_message(channel_id)
-                    .embeds(&embeds.lower_embeds)?
-                    .exec()
-                    .await?
-                    .model()
-                    .await?
-                    .id
-                );
-            }
-            if (Some(upper_message_id), Some(lower_message_id)) - (upper_message_id, lower_message_id) {
-                Ok((upper_message_id, lower_message_id))
-            } else {
-                Ok(None)
-            }
-        }
+async fn update_game_message(
+    http: &Client,
+    upper_message_id: Id<MessageMarker>,
+    lower_message_id: Id<MessageMarker>,
+    msg: GameRenderMessage,
+    channel_id: Id<ChannelMarker>,
+) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
+    let embeds = msg.embeds;
+    let mut deleted = false;
+    if embeds.upper_embeds.len() > 0 {
+        http.update_message(channel_id, upper_message_id)
+            .embeds(Some(&embeds.upper_embeds))?
+            .components(Some(&embeds.controls))?  // Components are cleared with an empty slice, None does nothing for them
+            .exec()
+            .await?;
+    } else {
+        http.delete_message(channel_id, upper_message_id).exec().await?;
+        deleted = true;
+    }
+
+    if embeds.lower_embeds.len() > 0 {
+        http.update_message(channel_id, lower_message_id)
+            .embeds(None)?
+            .embeds(Some(&embeds.lower_embeds))?
+            .exec()
+            .await?;
+    } else {
+        http.delete_message(channel_id, lower_message_id).exec().await?;
+        deleted = true;
+    }
+
+    if deleted {
+        Ok(None)
+    } else {
+        Ok(Some((upper_message_id, lower_message_id)))
     }
 }

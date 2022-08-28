@@ -102,7 +102,7 @@ pub struct GameEmbedsBuilder {
     pub enemies: Option<Embed>,
     pub log: Option<Embed>,
     pub players: Option<Embed>,
-    pub controls: Vec<Component>,
+    pub controls: ArrayVec<ActionRow, 2>,
 }
 
 impl GameEmbedsBuilder {
@@ -120,10 +120,8 @@ impl GameEmbedsBuilder {
                 embeds.upper_embeds.push(enemies);
             }
 
-            if self.controls.len() > 0 {
-                embeds.controls.push(
-                    Component::ActionRow(ActionRow { components: self.controls  })
-                );
+            for action_row in self.controls {
+                embeds.controls.push(Component::ActionRow(action_row));
             }
 
             if let Some(log) = self.log {
@@ -144,7 +142,7 @@ impl GameEmbedsBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct GameEmbeds {
     pub upper_embeds: ArrayVec<Embed, 2>,
-    pub controls: ArrayVec<Component, 1>,
+    pub controls: ArrayVec<Component, 2>,
     pub lower_embeds: ArrayVec<Embed, 2>,
 }
 

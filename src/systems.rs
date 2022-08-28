@@ -10,6 +10,7 @@ use std::{
 
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
+use rand::Rng;
 use twilight_model::{id::{marker::GuildMarker, Id}, application::component::{ActionRow, Component as MessageComponent, Button as MessageButton, button::ButtonStyle}, channel::ReactionType};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
@@ -17,12 +18,12 @@ use crate::{
     bundles::{Bygone03Bundle, BygoneParts, PlayerBundle},
     components::{
         Active, Attack, Bygone03Stage, BygonePart, Enemy, GuildIdComponent, Player, PlayerName,
-        Ready, UserIdComponent, Vitality,
+        Ready, UserIdComponent, Vitality, Health,
     },
     dice::{choose_mut, Dice},
     events::*,
     game_helpers::{EventDelay, Game, GameId, GameRenderMessage, GameStatus, GameTimer, GameEmbeds, GameEmbedsBuilder},
-    localization::RenderText, command_parser::BYGONE_PARTS_FROM_EMOJI_NAME,
+    localization::{RenderText, Localization}, command_parser::{BYGONE_PARTS_FROM_EMOJI_NAME, AUXILIARY_EMOJIS},
 };
 
 pub fn listen(
@@ -59,8 +60,7 @@ pub fn listen(
                     let should_start_new_game = match games.get(&ev.guild) {
                         Some(game) => {
                             game.status == GameStatus::Lost
-                                || game.status != GameStatus::Ongoing
-                                    && elapsed_since(&game.start_time) > 60 * 60
+                                || elapsed_since(&game.start_time) > 60 * 60
                         }
                         None => true,
                     };
@@ -441,11 +441,12 @@ pub fn render(
 ) -> impl FnMut(
     Res<HashMap<Id<GuildMarker>, Game>>,
     ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
+    ResMut<GlobalRng>,
     EventReader<GameDrawEvent>,
     Query<(&PlayerName, &GuildIdComponent, &Vitality), (With<Player>,)>,
     Query<(&GuildIdComponent, &BygoneParts, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
-    move |games, mut battle_log, mut ev_game_draw, players, enemies| {
+    move |games, mut battle_log, mut rng, mut ev_game_draw, players, enemies| {
         for GameDrawEvent { guild_id } in ev_game_draw.iter() {
             if let Some(game) = games.get(guild_id) {
                 let loc = &game.localization;
@@ -476,28 +477,72 @@ pub fn render(
                             &loc.core,
                             stage.render_text(loc)
                         );
-                        let core = parts[BygonePart::Core].render_text(loc);
                         let sensor = parts[BygonePart::Sensor].render_text(loc);
-                        let left_wing = parts[BygonePart::LeftWing].render_text(loc);
-                        let right_wing = parts[BygonePart::RightWing].render_text(loc);
+                        let core = parts[BygonePart::Core].render_text(loc);
                         let gun = parts[BygonePart::Gun].render_text(loc);
+                        let right_wing = parts[BygonePart::RightWing].render_text(loc);
+                        let left_wing = parts[BygonePart::LeftWing].render_text(loc);
 
                         embeds_builder.enemies = Some(
                             EmbedBuilder::new()
                                 .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
-                                .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
                                 .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
-                                .field(
-                                    EmbedFieldBuilder::new(&loc.left_wing_title, left_wing)
-                                        .inline(),
-                                )
+                                .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
+                                .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
                                 .field(
                                     EmbedFieldBuilder::new(&loc.right_wing_title, right_wing)
                                         .inline(),
                                 )
-                                .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
+                                .field(
+                                    EmbedFieldBuilder::new(&loc.left_wing_title, left_wing)
+                                        .inline(),
+                                )
                                 .build(),
                         );
+
+                        fn get_button_style(health: &Health) -> ButtonStyle {
+                            if health.current() == 0 {
+                                ButtonStyle::Secondary
+                            } else if health.current() > health.max() / 2 {
+                                ButtonStyle::Success
+                            } else {
+                                ButtonStyle::Danger
+                            }
+                        }
+
+                        fn make_button(emoji: &str, health: &Health) -> MessageComponent {
+                            MessageComponent::Button(MessageButton {
+                                custom_id: Some(emoji.to_owned()),
+                                disabled: !health.alive(),
+                                emoji: Some(ReactionType::Unicode { name: emoji.to_owned() }),
+                                label: None,
+                                style: get_button_style(health),
+                                url: None,
+                            })
+                        }
+
+                        embeds_builder.controls.clear();
+                        embeds_builder.controls.push(ActionRow {
+                            components: vec! {
+                                make_button("🇸", parts[BygonePart::Sensor].health()),
+                                make_button("🇨", parts[BygonePart::Core].health()),
+                                make_button("🇬", parts[BygonePart::Gun].health()),
+                            },
+                        });
+                        embeds_builder.controls.push(ActionRow {
+                            components: vec! {
+                                make_button("🇷", parts[BygonePart::RightWing].health()),
+                                MessageComponent::Button(MessageButton {
+                                    custom_id: Some("status".to_owned()),
+                                    disabled: true,
+                                    emoji: None, //Some(ReactionType::Custom { name: (*rng.sample(&AUXILIARY_EMOJIS).unwrap_or(&"")).to_owned(), id: None, animated: false }),
+                                    label: Some(" ".to_owned()),
+                                    style: ButtonStyle::Secondary,
+                                    url: None,
+                                }),
+                                make_button("🇱", parts[BygonePart::LeftWing].health()),
+                            },
+                        });
                     }
 
                     if let Some(battle_log_lines) = battle_log.remove(guild_id) {
@@ -524,17 +569,6 @@ pub fn render(
                         embeds_builder.players = Some(players_embed);
                     }
 
-                    for emoji_name in BYGONE_PARTS_FROM_EMOJI_NAME.keys() {
-                        let component = MessageComponent::Button(MessageButton {
-                            custom_id: Some((*emoji_name).to_owned()),
-                            disabled: false,
-                            emoji: Some(ReactionType::Unicode { name: (*emoji_name).to_owned() }),
-                            label: None,
-                            style: ButtonStyle::Secondary,
-                            url: None,
-                        });
-                        embeds_builder.controls.push(component);
-                    }
                 } else {
                     println!("Rendering finished game in guild {}", guild_id);
                 }
