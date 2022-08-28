@@ -21,6 +21,7 @@ pub const BYGONE_PARTS_FROM_EMOJI_NAME: phf::OrderedMap<&str, BygonePart> = phf_
     "🇬" => BygonePart::Gun,
 };
 
+// Maybe use Ъ with a very small chance
 pub const AUXILIARY_EMOJIS: [&str; 5] = [
     ":Nod_shy:",
     ":Ollie_in_sunglasses:",
