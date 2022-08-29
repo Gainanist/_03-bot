@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display, error::Error};
 
+use derive_new::new;
 use twilight_model::{channel::{embed::Embed, ReactionType}, application::component::{Component, ActionRow, button::ButtonStyle, Button}, id::{Id, marker::GuildMarker}};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
@@ -26,14 +27,43 @@ fn make_button(emoji: &str, health: &Health) -> Component {
     })
 }
 
+#[derive(Clone, Debug, new)]
+pub struct GameRenderError {
+    id: Id<GuildMarker>,
+    msg: String,
+}
+
+impl Display for GameRenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}, guild id: {}", self.msg, self.id)
+    }
+}
+
+impl Error for GameRenderError {}
+
+#[derive(Clone, Debug)]
+pub struct  RenderedMessagePure {
+    pub embeds: Vec<Embed>,
+    pub components: Vec<Component>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RenderedGamePure {
+    pub upper_message: RenderedMessagePure,
+    pub lower_message: RenderedMessagePure,
+}
+
 #[derive(Clone, Debug)]
 pub enum RenderedMessage {
-    Message {
-        embeds: Vec<Embed>,
-        components: Vec<Component>,
-    },
+    Message(RenderedMessagePure),
     Skip,
     Delete,
+}
+
+impl From<RenderedMessagePure> for RenderedMessage {
+    fn from(message: RenderedMessagePure) -> Self {
+        Self::Message(message)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -42,34 +72,52 @@ pub struct RenderedGame {
     pub lower_message: RenderedMessage,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct DiscordRenderer {
-    rendered_games_cache: HashMap<Id<GuildMarker>, RenderedGame>,
+impl From<RenderedGamePure> for RenderedGame {
+    fn from(game: RenderedGamePure) -> Self {
+        Self {
+            upper_message: game.upper_message.into(),
+            lower_message: game.lower_message.into(),
+        }
+    }
 }
 
-impl DiscordRenderer {
-    pub fn new() -> Self {
-        Self::default()
-    }
+#[derive(Clone, Debug, Default)]
+pub struct DiscordRenderer;
 
-    pub fn render(&mut self, ev: GameRenderEvent) -> RenderedGame {
-        let rendered_game = match ev.payload {
+impl DiscordRenderer {
+    pub fn render(ev: GameRenderEvent) -> Result<RenderedGamePure, GameRenderError> {
+        match ev.payload {
             GameRenderPayload::OngoingGame(payload) => {
-                println!("Rendering ongoing game in guild {}", ev.id);
-                self.render_ongoing_game(&ev.loc, &payload)
+                println!("Rendering ongoing game in guild {}", ev.guild_id);
+                Ok(Self::render_ongoing_game(&ev.loc, &payload))
             },
             GameRenderPayload::FinishedGame(status) => {
-                println!("Rendering finished game in guild {}", ev.id);
-                self.render_finished_game(&ev.loc, status)
+                Err(GameRenderError::new(ev.guild_id, "can't render finished game without previous rendered game".to_owned()))
             },
-            GameRenderPayload::TurnProgress(progress) => todo!(),
-        };
-        self.rendered_games_cache.insert(ev.id, rendered_game.clone());
-
-        rendered_game
+            GameRenderPayload::TurnProgress(progress) => {
+                Err(GameRenderError::new(ev.guild_id, "can't render ruen progress without previous rendered game".to_owned()))
+            },
+        }
     }
 
-    fn render_ongoing_game(&self, loc: &Localization, payload: &OngoingGamePayload) -> RenderedGame {
+    pub fn render_with_previous(ev: GameRenderEvent, previous: &RenderedGame) -> Result<RenderedGame, GameRenderError> {
+        match ev.payload {
+            GameRenderPayload::OngoingGame(payload) => {
+                println!("Rendering ongoing game in guild {}", ev.guild_id);
+                Ok(Self::render_ongoing_game(&ev.loc, &payload).into())
+            },
+            GameRenderPayload::FinishedGame(status) => {
+                println!("Rendering finished game in guild {}", ev.guild_id);
+                Ok(Self::render_finished_game(&ev.loc, status))
+            },
+            GameRenderPayload::TurnProgress(progress) => {
+                println!("Rendering turn progress in guild {}", ev.guild_id);
+                Self::render_turn_progress(ev.guild_id, previous, &ev.loc, progress)
+            },
+        }
+    }
+
+    fn render_ongoing_game(loc: &Localization, payload: &OngoingGamePayload) -> RenderedGamePure {
         let title = EmbedBuilder::new()
             .description(&loc.title)
             .image(
@@ -131,11 +179,14 @@ impl DiscordRenderer {
             }),
         ];
 
-        let upper_message = RenderedMessage::Message {
+        let upper_message = RenderedMessagePure {
             embeds: vec! [ title, enemies ],
             components: controls,
         };
 
+        let turn_progress = EmbedBuilder::new()
+            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, "[        ]"))
+            .build();
 
         let battle_log_contents = " • ".to_string() + &payload.battle_log_lines.join("\n • ");
         let log = EmbedBuilder::new()
@@ -150,15 +201,15 @@ impl DiscordRenderer {
         }
         let players = players_embed_builder.build();
 
-        let lower_message = RenderedMessage::Message {
+        let lower_message = RenderedMessagePure {
             embeds: vec! [ log, players ],
             components: Vec::new(),
         };
 
-        RenderedGame { upper_message, lower_message }
+        RenderedGamePure { upper_message, lower_message }
     }
 
-    fn render_finished_game(&self, loc: &Localization, status: FinishedGameStatus) -> RenderedGame {
+    fn render_finished_game(loc: &Localization, status: FinishedGameStatus) -> RenderedGame {
         let message = match status {
             FinishedGameStatus::Won => &loc.won.0,
             FinishedGameStatus::Lost => &loc.lost.0,
@@ -167,14 +218,38 @@ impl DiscordRenderer {
 
         RenderedGame {
             upper_message: RenderedMessage::Delete,
-            lower_message: RenderedMessage::Message {
+            lower_message: RenderedMessagePure {
                 embeds: vec! [ embed ],
                 components: Vec::new(),
-            },
+            }.into(),
         }
     }
 
-    fn render_turn_progress(&self, id: Id<GuildMarker>, loc: &Localization, pprogress: &f32) -> RenderedGame {
+    fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
+        if let RenderedMessage::Message(mut lower_message) = previous.lower_message.clone() {
+            let filled_count = ((progress / 0.1).round() as isize).max(0).min(7) as usize;
+            let progress_bar = match filled_count {
+                0 => "[        ]".to_owned(),
+                1 => "[>       ]".to_owned(),
+                2..=7 => format!("[{}>{}]", "▮".to_owned().repeat(filled_count), " ".to_owned().repeat(7 - filled_count)),
+                _ => "[▮▮▮▮▮▮▮>]".to_owned(),
+            };
+            let progress_bar_embed = EmbedBuilder::new()
+                .field(EmbedFieldBuilder::new(&loc.turn_progress_title, progress_bar))
+                .build();
 
+            if lower_message.embeds.is_empty() {
+                lower_message.embeds.push(progress_bar_embed);
+            } else {
+                lower_message.embeds[0] = progress_bar_embed;
+            }
+
+            Ok(RenderedGame {
+                upper_message: RenderedMessage::Skip,
+                lower_message: lower_message.into(),
+            })
+        } else {
+            Err(GameRenderError::new(id, "can't write progress bar for deleted or skipped lower message".to_owned()))
+        }
     }
 }

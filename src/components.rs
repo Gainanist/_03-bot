@@ -8,7 +8,7 @@ use twilight_model::id::{
 
 use crate::localization::{Localization, RenderText};
 
-#[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Component, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Health {
     current: usize,
     max: usize,
@@ -53,7 +53,7 @@ impl RenderText for Health {
     }
 }
 
-#[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Component, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Vitality {
     health: Health,
     dodge: isize,
@@ -106,7 +106,7 @@ impl RenderText for Vitality {
     }
 }
 
-#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Attack {
     damage: usize,
     accuracy: isize,

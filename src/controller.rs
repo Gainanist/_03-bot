@@ -16,11 +16,11 @@ use twilight_model::{
     user::{CurrentUser, User}, application::{component::{ActionRow, Component, Button, button::ButtonStyle}, interaction::{Interaction, InteractionData, message_component::MessageComponentInteractionData}}, guild::PartialMember,
 };
 
+use crate::discord_renderer::{RenderedGamePure, RenderedGame, RenderedMessage};
 use crate::{
     command_parser::BYGONE_PARTS_FROM_EMOJI_NAME,
     components::PlayerName,
     events::{GameStartEvent, InputEvent, PlayerAttackEvent},
-    game_helpers::GameRenderMessage,
     localization::Localization,
 };
 
@@ -82,100 +82,67 @@ pub fn start_game(sender: &Sender<InputEvent>, localization: Localization, msg: 
     }
 }
 
-pub async fn send_game_message(
+pub async fn create_game_message(
     http: &Client,
-    message_id: Option<&(Id<MessageMarker>, Id<MessageMarker>)>,
-    msg: GameRenderMessage,
+    rendered_game: &RenderedGamePure,
     channel_id: Id<ChannelMarker>,
-) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
-    match message_id {
-        Some((upper_message_id, lower_message_id)) =>
-            update_game_message(http, *upper_message_id, *lower_message_id, msg, channel_id).await,
-        None => create_game_message(http, msg, channel_id).await,
-    }
+) -> Result<(Id<MessageMarker>, Id<MessageMarker>), Box<dyn Error + Send + Sync>> {
+    let upper_message_id = http
+        .create_message(channel_id)
+        .embeds(&rendered_game.upper_message.embeds)?
+        .components(&rendered_game.upper_message.components)?
+        .exec()
+        .await?
+        .model()
+        .await?
+        .id;
+    let lower_message_id = http
+        .create_message(channel_id)
+        .embeds(&rendered_game.lower_message.embeds)?
+        .components(&rendered_game.lower_message.components)?
+        .exec()
+        .await?
+        .model()
+        .await?
+        .id;
+    Ok((upper_message_id, lower_message_id))
 }
 
-async fn create_game_message(
-    http: &Client,
-    msg: GameRenderMessage,
-    channel_id: Id<ChannelMarker>,
-) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
-    let embeds = msg.embeds;
-    let upper_message_id;
-    let lower_message_id;
-    if let Some(upper_message) = embeds.upper_message {
-        upper_message_id = if upper_message.embeds.len() > 0 {
-            Some(http
-                .create_message(channel_id)
-                .embeds(&upper_message.embeds)?
-                .components(&upper_message.controls)?
-                .exec()
-                .await?
-                .model()
-                .await?
-                .id
-            )
-        } else {
-            None
-        };
-    } else {
-        return Err(Box::new(GameCreateError));
-    }
-    if let Some(lower_message) = embeds.lower_message {
-        lower_message_id = if lower_message.embeds.len() > 0 {
-            Some(http
-                .create_message(channel_id)
-                .embeds(&lower_message.embeds)?
-                .components(&lower_message.controls)?
-                .exec()
-                .await?
-                .model()
-                .await?
-                .id
-            )
-        } else {
-            None
-        };
-    } else {
-        return Err(Box::new(GameCreateError));
-    }
-    if let (Some(upper_message_id), Some(lower_message_id)) = (upper_message_id, lower_message_id) {
-        Ok(Some((upper_message_id, lower_message_id)))
-    } else {
-        Ok(None)
-    }
-}
-
-async fn update_game_message(
+pub async fn update_game_message(
     http: &Client,
     upper_message_id: Id<MessageMarker>,
     lower_message_id: Id<MessageMarker>,
-    msg: GameRenderMessage,
+    rendered_game: &RenderedGame,
     channel_id: Id<ChannelMarker>,
 ) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
-    let embeds = msg.embeds;
     let mut deleted = false;
-    if let Some(upper_message) = embeds.upper_message {
-        http.update_message(channel_id, upper_message_id)
-            .embeds(Some(&upper_message.embeds))?
-            .components(Some(&upper_message.controls))?  // Components are cleared with an empty slice, None does nothing for them
-            .exec()
-            .await?;
-    } else {
-        http.delete_message(channel_id, upper_message_id).exec().await?;
-        deleted = true;
+    match &rendered_game.upper_message {
+        RenderedMessage::Message(message) => {
+            http.update_message(channel_id, upper_message_id)
+                .embeds(Some(&message.embeds))?
+                .components(Some(&message.components))?  // Components are cleared with an empty slice, None does nothing for them
+                .exec()
+                .await?;
+        },
+        RenderedMessage::Delete => {
+            http.delete_message(channel_id, upper_message_id).exec().await?;
+            deleted = true;
+        },
+        RenderedMessage::Skip => {},
     }
-
-    if let Some(lower_message) = embeds.lower_message {
-        http.update_message(channel_id, lower_message_id)
-            .embeds(None)?
-            .embeds(Some(&lower_message.embeds))?
-            .components(Some(&lower_message.controls))?
-            .exec()
-            .await?;
-    } else {
-        http.delete_message(channel_id, lower_message_id).exec().await?;
-        deleted = true;
+    match &rendered_game.lower_message {
+        RenderedMessage::Message(message) => {
+            http.update_message(channel_id, lower_message_id)
+                .embeds(Some(&message.embeds))?
+                .components(Some(&message.components))?  // Components are cleared with an empty slice, None does nothing for them
+                .exec()
+                .await?;
+        },
+        RenderedMessage::Delete => {
+            http.delete_message(channel_id, lower_message_id).exec().await?;
+            deleted = true;
+        },
+        RenderedMessage::Skip => {},
     }
 
     if deleted {

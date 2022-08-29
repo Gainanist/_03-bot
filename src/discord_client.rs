@@ -22,10 +22,9 @@ use twilight_model::{id::{
 
 use crate::{
     command_parser::{is_game_starting, BYGONE_PARTS_FROM_EMOJI_NAME},
-    controller::{send_game_message, start_game, process_interaction},
-    events::InputEvent,
-    game_helpers::GameRenderMessage,
-    localization::Localizations,
+    controller::{start_game, process_interaction, update_game_message, create_game_message},
+    events::{InputEvent, GameRenderEvent},
+    localization::Localizations, discord_renderer::{DiscordRenderer, RenderedGame, RenderedMessage},
 };
 
 pub struct DiscordClient {
@@ -33,6 +32,61 @@ pub struct DiscordClient {
     http: Arc<HttpClient>,
     http_clone: Arc<HttpClient>,
     game_channel_ids: Arc<Mutex<HashMap<Id<GuildMarker>, Id<ChannelMarker>>>>,
+}
+
+fn merge_with_cached(rendered_game: RenderedGame, mut cached: RenderedGame) -> RenderedGame {
+    match rendered_game.upper_message {
+        RenderedMessage::Message(message) => {
+            cached.upper_message = message.into();
+        },
+        RenderedMessage::Skip => {},
+        RenderedMessage::Delete => {
+            cached.upper_message = RenderedMessage::Delete;
+        },
+    }
+    match rendered_game.lower_message {
+        RenderedMessage::Message(message) => {
+            cached.lower_message = message.into();
+        },
+        RenderedMessage::Skip => {},
+        RenderedMessage::Delete => {
+            cached.lower_message = RenderedMessage::Delete;
+        },
+    }
+
+    cached
+}
+
+async fn try_update_message(
+    ev: GameRenderEvent,
+    cached: RenderedGame,
+    http: &HttpClient,
+    message_id: (Id<MessageMarker>, Id<MessageMarker>),
+    channel_id: Id<ChannelMarker>,
+    guild_id: Id<GuildMarker>,
+    messages: &mut HashMap<Id<GuildMarker>, (Id<MessageMarker>, Id<MessageMarker>, RenderedGame)>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let rendered_game = DiscordRenderer::render_with_previous(ev, &cached)?;
+    let message_id = update_game_message(http, message_id.0, message_id.1, &rendered_game, channel_id).await?;
+    if let Some(message_id) = message_id {
+        messages.insert(guild_id, (message_id.0, message_id.1, merge_with_cached(rendered_game, cached)));
+    } else {
+        messages.remove(&guild_id);
+    }
+    Ok(())
+}
+
+async fn try_create_message(
+    ev: GameRenderEvent,
+    http: &HttpClient,
+    channel_id: Id<ChannelMarker>,
+    guild_id: Id<GuildMarker>,
+    messages: &mut HashMap<Id<GuildMarker>, (Id<MessageMarker>, Id<MessageMarker>, RenderedGame)>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let rendered_game = DiscordRenderer::render(ev)?;
+    let message_id = create_game_message(http, &rendered_game, channel_id).await?;
+    messages.insert(guild_id, (message_id.0, message_id.1, rendered_game.into()));
+    Ok(())
 }
 
 impl DiscordClient {
@@ -143,43 +197,47 @@ impl DiscordClient {
         Ok(input_receiver)
     }
 
-    pub async fn listen_game(&self) -> Sender<GameRenderMessage> {
+    pub async fn listen_game(&self) -> Sender<GameRenderEvent> {
         let game_channel_ids_output = Arc::clone(&self.game_channel_ids);
         let http_write = Arc::clone(&self.http);
-        let (output_sender, output_receiver) = mpsc::channel::<GameRenderMessage>();
+        let (output_sender, output_receiver) = mpsc::channel::<GameRenderEvent>();
 
         tokio::spawn(async move {
-            let mut message_ids = HashMap::new();
+            let mut messages = HashMap::new();
             loop {
-                let msg = output_receiver.recv_timeout(Duration::from_secs(1));
-                if let Ok(msg) = msg {
+                let ev = output_receiver.recv_timeout(Duration::from_secs(1));
+                if let Ok(ev) = ev {
+                    let guild_id = ev.guild_id;
                     let mut channel_id = None;
                     if let Ok(game_channel_ids_output_lock) = game_channel_ids_output.lock() {
-                        if let Some(_channel_id) = game_channel_ids_output_lock.get(&msg.guild_id) {
+                        if let Some(_channel_id) = game_channel_ids_output_lock.get(&guild_id) {
                             channel_id = Some(*_channel_id);
                         }
                     }
 
                     if let Some(channel_id) = channel_id {
-                        let game_id = msg.game_id;
-                        let message_id = message_ids.get(&game_id);
-                        match send_game_message(&http_write, message_id, msg, channel_id).await {
-                            Ok(message_id) => {
-                                println!(
-                                    "Successfully sent/updated a game message in channel {}",
+                        if let Some((upper_message_id, lower_message_id, cached)) = messages.remove(&guild_id) {
+                            match try_update_message(ev, cached, &http_write, (upper_message_id, lower_message_id), channel_id, guild_id, &mut messages).await {
+                                Ok(()) => println!(
+                                    "Successfully updated a game message in channel {}",
                                     channel_id
-                                );
-                                if let Some(message_id) = message_id {
-                                    message_ids.insert(game_id, message_id);
-                                } else {
-                                    message_ids.remove(&game_id);
-                                }
-                            }
-                            Err(err) => {
-                                println!(
-                                    "Error sending/updating a game message in channel {}: {}",
+                                ),
+                                Err(err) => println!(
+                                    "Error updating a game message in channel {}: {}",
                                     channel_id, err
-                                );
+                                ),
+                            }
+                        } else {
+                            match try_create_message(ev, &http_write, channel_id, guild_id, &mut messages).await {
+                                Ok(()) => println!(
+                                    "Successfully created a game message in channel {}",
+                                    channel_id
+                                ),
+                                Err(err) => println!(
+                                    "Error creating a game message in channel {}: {}",
+                                    channel_id, err
+                                ),
+
                             }
                         }
                     }

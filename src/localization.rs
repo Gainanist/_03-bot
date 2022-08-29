@@ -61,6 +61,7 @@ pub struct Localization {
     pub core_burning: LocalizedLine,
     pub core_destroyed: LocalizedLine,
 
+    pub turn_progress_title: LocalizedLine,
     pub log_title: LocalizedLine,
     pub player_join: Vec<LocalizedLine>,
     pub player_miss: Vec<LocalizedLine>,
@@ -105,6 +106,7 @@ impl Localizations {
             core_burning: LocalizedLine("*ГОРИТ!*".to_string()),
             core_destroyed: LocalizedLine("*УНИЧТОЖЕНО!*".to_string()),
 
+            turn_progress_title: LocalizedLine("Время хода".to_owned()),
             log_title: LocalizedLine("Лог битвы".to_string()),
             player_join: vec![
                 LocalizedLine("*{PLAYER_NAME}* рвётся в бой".to_string()),
@@ -166,6 +168,7 @@ impl Localizations {
             core_burning: LocalizedLine("*BURNING!*".to_string()),
             core_destroyed: LocalizedLine("*DESTROYED!*".to_string()),
 
+            turn_progress_title: LocalizedLine("Turn timer".to_owned()),
             log_title: LocalizedLine("Battle log".to_string()),
             player_join: vec![
                 LocalizedLine("*{PLAYER_NAME}* joins the fray".to_string()),

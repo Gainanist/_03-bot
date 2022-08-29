@@ -181,7 +181,7 @@ pub enum GameRenderPayload {
 
 #[derive(Clone, Debug)]
 pub struct GameRenderEvent {
-    pub id: Id<GuildMarker>,
+    pub guild_id: Id<GuildMarker>,
     pub loc: Localization,
     pub payload: GameRenderPayload,
 }

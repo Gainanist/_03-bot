@@ -5,11 +5,12 @@ use std::{
         mpsc::{Receiver, Sender},
         Mutex,
     },
-    time::{Instant, SystemTime},
+    time::{Instant, SystemTime}, default,
 };
 
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
+use enum_map::EnumMap;
 use rand::Rng;
 use twilight_model::{id::{marker::GuildMarker, Id}, application::component::{ActionRow, Component as MessageComponent, Button as MessageButton, button::ButtonStyle}, channel::ReactionType};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
@@ -22,8 +23,8 @@ use crate::{
     },
     dice::{choose_mut, Dice},
     events::*,
-    game_helpers::{EventDelay, Game, GameId, GameRenderMessage, GameStatus, GameTimer, GameEmbeds, GameEmbedsBuilder},
-    localization::{RenderText, Localization}, command_parser::{BYGONE_PARTS_FROM_EMOJI_NAME, AUXILIARY_EMOJIS},
+    game_helpers::{EventDelay, Game, GameId, GameStatus, GameTimer},
+    localization::{RenderText, Localization}, command_parser::{BYGONE_PARTS_FROM_EMOJI_NAME, AUXILIARY_EMOJIS}, discord_renderer::RenderedGame,
 };
 
 pub fn listen(
@@ -436,7 +437,7 @@ pub fn log_battle(
 }
 
 pub fn render(
-    sender: Mutex<Sender<GameRenderMessage>>,
+    sender: Mutex<Sender<GameRenderEvent>>,
 ) -> impl FnMut(
     Res<HashMap<Id<GuildMarker>, Game>>,
     ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
@@ -445,136 +446,55 @@ pub fn render(
     Query<(&PlayerName, &GuildIdComponent, &Vitality), (With<Player>,)>,
     Query<(&GuildIdComponent, &BygoneParts, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
-    move |games, mut battle_log, mut rng, mut ev_game_draw, players, enemies| {
+    move |games, mut battle_log, mut rng, mut ev_game_draw, all_players, enemies| {
         for GameDrawEvent { guild_id } in ev_game_draw.iter() {
             if let Some(game) = games.get(guild_id) {
-                let loc = &game.localization;
-                let mut embeds_builder = GameEmbeds::builder();
-                embeds_builder.title = Some(match game.status {
-                    GameStatus::Ongoing => EmbedBuilder::new()
-                        .description(&loc.title)
-                        .image(
-                            ImageSource::url(
-                                "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif",
-                            )
-                            .unwrap(),
-                        )
-                        .build(),
-                    GameStatus::Won => EmbedBuilder::new().description(&loc.won).build(),
-                    GameStatus::Lost => EmbedBuilder::new().description(&loc.lost).build(),
-                });
-                if game.status == GameStatus::Ongoing {
-                    println!("Rendering ongoing game in guild {}", guild_id);
+                let game_render_ev = if let Some(finished_status) = game.status.into() {
+                    GameRenderEvent {
+                        guild_id: *guild_id,
+                        loc: game.localization.clone(),
+                        payload: GameRenderPayload::FinishedGame(finished_status),
+                    }
+                } else {
+                    let mut bygone_attack = Attack::default();
+                    let mut bygone_parts = EnumMap::<BygonePart, Vitality>::default();
+                    let mut bygone_stage = Bygone03Stage::Armored;
                     for (enemy_guild_id, BygoneParts(parts), attack, stage) in enemies.iter() {
                         if enemy_guild_id.0 != *guild_id {
                             continue;
                         }
-                        let loc = &game.localization;
-                        let status = format!(
-                            " • {}\n • {}: {}",
-                            attack.render_text(loc),
-                            &loc.core,
-                            stage.render_text(loc)
-                        );
-                        let sensor = parts[BygonePart::Sensor].render_text(loc);
-                        let core = parts[BygonePart::Core].render_text(loc);
-                        let gun = parts[BygonePart::Gun].render_text(loc);
-                        let right_wing = parts[BygonePart::RightWing].render_text(loc);
-                        let left_wing = parts[BygonePart::LeftWing].render_text(loc);
+                        bygone_attack = *attack;
+                        bygone_parts = *parts;
+                        bygone_stage = *stage;
 
-                        embeds_builder.enemies = Some(
-                            EmbedBuilder::new()
-                                .field(EmbedFieldBuilder::new(&loc.status_title, status).build())
-                                .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
-                                .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
-                                .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
-                                .field(
-                                    EmbedFieldBuilder::new(&loc.right_wing_title, right_wing)
-                                        .inline(),
-                                )
-                                .field(
-                                    EmbedFieldBuilder::new(&loc.left_wing_title, left_wing)
-                                        .inline(),
-                                )
-                                .build(),
-                        );
-
-                        fn get_button_style(health: &Health) -> ButtonStyle {
-                            if health.current() == 0 {
-                                ButtonStyle::Secondary
-                            } else if health.current() > health.max() / 2 {
-                                ButtonStyle::Success
-                            } else {
-                                ButtonStyle::Danger
-                            }
-                        }
-
-                        fn make_button(emoji: &str, health: &Health) -> MessageComponent {
-                            MessageComponent::Button(MessageButton {
-                                custom_id: Some(emoji.to_owned()),
-                                disabled: !health.alive(),
-                                emoji: Some(ReactionType::Unicode { name: emoji.to_owned() }),
-                                label: None,
-                                style: get_button_style(health),
-                                url: None,
-                            })
-                        }
-
-                        embeds_builder.controls.clear();
-                        embeds_builder.controls.push(ActionRow {
-                            components: vec! {
-                                make_button("🇸", parts[BygonePart::Sensor].health()),
-                                make_button("🇨", parts[BygonePart::Core].health()),
-                                make_button("🇬", parts[BygonePart::Gun].health()),
-                            },
-                        });
-                        embeds_builder.controls.push(ActionRow {
-                            components: vec! {
-                                make_button("🇷", parts[BygonePart::RightWing].health()),
-                                MessageComponent::Button(MessageButton {
-                                    custom_id: Some("status".to_owned()),
-                                    disabled: true,
-                                    emoji: None, //Some(ReactionType::Custom { name: (*rng.sample(&AUXILIARY_EMOJIS).unwrap_or(&"")).to_owned(), id: None, animated: false }),
-                                    label: Some(" ".to_owned()),
-                                    style: ButtonStyle::Secondary,
-                                    url: None,
-                                }),
-                                make_button("🇱", parts[BygonePart::LeftWing].health()),
-                            },
-                        });
                     }
 
-                    if let Some(battle_log_lines) = battle_log.remove(guild_id) {
-                        let battle_log_contents =
-                            " • ".to_string() + &battle_log_lines.join("\n • ");
-                            embeds_builder.log = Some(
-                            EmbedBuilder::new()
-                                .field(EmbedFieldBuilder::new(&loc.log_title, battle_log_contents))
-                                .build(),
-                        );
-                    }
+                    let battle_log_lines = battle_log.remove(guild_id).unwrap_or_default();
 
-                    let mut players_embed_builder = EmbedBuilder::new();
-                    for (name, player_guild_id, vitality) in players.iter() {
+                    let mut players = Vec::new();
+                    for (name, player_guild_id, vitality) in all_players.iter() {
                         if player_guild_id.0 != *guild_id {
                             continue;
                         }
-                        players_embed_builder = players_embed_builder.field(
-                            EmbedFieldBuilder::new(&name.0, vitality.health().render_text(loc)),
-                        );
-                    }
-                    let players_embed = players_embed_builder.build();
-                    if players_embed.fields.len() > 0 {
-                        embeds_builder.players = Some(players_embed);
+                        players.push((name.clone(), *vitality));
                     }
 
-                } else {
-                    println!("Rendering finished game in guild {}", guild_id);
-                }
+                    GameRenderEvent {
+                        guild_id: *guild_id,
+                        loc: game.localization.clone(),
+                        payload: GameRenderPayload::OngoingGame(OngoingGamePayload {
+                            bygone_parts,
+                            bygone_attack,
+                            bygone_stage,
+                            battle_log_lines,
+                            players,
+                        }),
+                    }
+
+                };
 
                 if let Ok(ref mut sender_lock) = sender.lock() {
-                    let message = GameRenderMessage::new(*guild_id, game.game_id, embeds_builder.build(game.status != GameStatus::Ongoing));
-                    sender_lock.send(message);
+                    sender_lock.send(game_render_ev);
                 }
             }
         }
