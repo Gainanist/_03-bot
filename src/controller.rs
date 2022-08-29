@@ -1,3 +1,4 @@
+use std::fmt;
 use std::{
     collections::HashSet,
     error::Error,
@@ -22,6 +23,17 @@ use crate::{
     game_helpers::GameRenderMessage,
     localization::Localization,
 };
+
+#[derive(Clone, Copy, Debug)]
+pub struct GameCreateError;
+
+impl fmt::Display for GameCreateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "need two messages to create a game")
+    }
+}
+
+impl Error for GameCreateError {}
 
 pub fn process_interaction(interaction: Interaction) -> Option<InputEvent> {
     if let (
@@ -89,36 +101,44 @@ async fn create_game_message(
     channel_id: Id<ChannelMarker>,
 ) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
     let embeds = msg.embeds;
-    let upper_message_id = if embeds.upper_embeds.len() > 0 {
-        let mut upper_message = http
-            .create_message(channel_id)
-            .embeds(&embeds.upper_embeds)?;
-        if embeds.controls.len() > 0 {
-            upper_message = upper_message.components(&embeds.controls)?;
-        }
-        Some(upper_message
-            .exec()
-            .await?
-            .model()
-            .await?
-            .id
-        )
+    let upper_message_id;
+    let lower_message_id;
+    if let Some(upper_message) = embeds.upper_message {
+        upper_message_id = if upper_message.embeds.len() > 0 {
+            Some(http
+                .create_message(channel_id)
+                .embeds(&upper_message.embeds)?
+                .components(&upper_message.controls)?
+                .exec()
+                .await?
+                .model()
+                .await?
+                .id
+            )
+        } else {
+            None
+        };
     } else {
-        None
-    };
-    let lower_message_id = if embeds.lower_embeds.len() > 0 {
-        Some(http
-            .create_message(channel_id)
-            .embeds(&embeds.lower_embeds)?
-            .exec()
-            .await?
-            .model()
-            .await?
-            .id
-        )
+        return Err(Box::new(GameCreateError));
+    }
+    if let Some(lower_message) = embeds.lower_message {
+        lower_message_id = if lower_message.embeds.len() > 0 {
+            Some(http
+                .create_message(channel_id)
+                .embeds(&lower_message.embeds)?
+                .components(&lower_message.controls)?
+                .exec()
+                .await?
+                .model()
+                .await?
+                .id
+            )
+        } else {
+            None
+        };
     } else {
-        None
-    };
+        return Err(Box::new(GameCreateError));
+    }
     if let (Some(upper_message_id), Some(lower_message_id)) = (upper_message_id, lower_message_id) {
         Ok(Some((upper_message_id, lower_message_id)))
     } else {
@@ -135,10 +155,10 @@ async fn update_game_message(
 ) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
     let embeds = msg.embeds;
     let mut deleted = false;
-    if embeds.upper_embeds.len() > 0 {
+    if let Some(upper_message) = embeds.upper_message {
         http.update_message(channel_id, upper_message_id)
-            .embeds(Some(&embeds.upper_embeds))?
-            .components(Some(&embeds.controls))?  // Components are cleared with an empty slice, None does nothing for them
+            .embeds(Some(&upper_message.embeds))?
+            .components(Some(&upper_message.controls))?  // Components are cleared with an empty slice, None does nothing for them
             .exec()
             .await?;
     } else {
@@ -146,10 +166,11 @@ async fn update_game_message(
         deleted = true;
     }
 
-    if embeds.lower_embeds.len() > 0 {
+    if let Some(lower_message) = embeds.lower_message {
         http.update_message(channel_id, lower_message_id)
             .embeds(None)?
-            .embeds(Some(&embeds.lower_embeds))?
+            .embeds(Some(&lower_message.embeds))?
+            .components(Some(&lower_message.controls))?
             .exec()
             .await?;
     } else {

@@ -10,6 +10,7 @@ arrayvec = "0.7.2"
 bevy = "0.8.0"
 bevy_turborand = "=0.2.0"
 clap = { version = "3.2.16", features = ["derive"] }
+derive-new = "0.5.9"
 enum-map = "1.1.1"
 futures = "0.3.17"
 phf = { version = "0.10.1", features = ["macros"] }

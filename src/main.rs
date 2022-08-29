@@ -10,6 +10,7 @@ mod game_helpers;
 mod io;
 mod localization;
 mod systems;
+mod discord_renderer;
 
 use std::{
     collections::HashMap,

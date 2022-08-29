@@ -1,12 +1,13 @@
 use bevy::prelude::*;
+use enum_map::EnumMap;
 use twilight_model::id::{
     marker::{GuildMarker, UserMarker},
     Id,
 };
 
 use crate::{
-    components::{BygonePart, PlayerName},
-    localization::Localization,
+    components::{BygonePart, PlayerName, Bygone03Stage, Attack, Vitality},
+    localization::Localization, bundles::BygoneParts, game_helpers::FinishedGameStatus,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -160,4 +161,27 @@ pub enum InputEvent {
 pub enum DelayedEvent {
     GameDraw(GameDrawEvent),
     PlayerAttack(PlayerAttackEvent),
+}
+
+#[derive(Clone, Debug)]
+pub struct OngoingGamePayload {
+    pub bygone_parts: EnumMap<BygonePart, Vitality>,
+    pub bygone_attack: Attack,
+    pub bygone_stage: Bygone03Stage,
+    pub battle_log_lines: Vec<String>,
+    pub players: Vec<(PlayerName, Vitality)>,
+}
+
+#[derive(Clone, Debug)]
+pub enum GameRenderPayload {
+    OngoingGame(OngoingGamePayload),
+    FinishedGame(FinishedGameStatus),
+    TurnProgress(f32),
+}
+
+#[derive(Clone, Debug)]
+pub struct GameRenderEvent {
+    pub id: Id<GuildMarker>,
+    pub loc: Localization,
+    pub payload: GameRenderPayload,
 }

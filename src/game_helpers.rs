@@ -3,6 +3,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use derive_new::new;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use twilight_model::{
@@ -64,6 +65,22 @@ pub enum GameStatus {
     Lost,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Enum, Eq, Hash, PartialEq, Serialize)]
+pub enum FinishedGameStatus {
+    Won,
+    Lost,
+}
+
+impl From<GameStatus> for Option<FinishedGameStatus> {
+    fn from(status: GameStatus) -> Self {
+        match status {
+            GameStatus::Ongoing => None,
+            GameStatus::Won => Some(FinishedGameStatus::Won),
+            GameStatus::Lost => Some(FinishedGameStatus::Lost),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct GameId(pub u128);
 
@@ -102,7 +119,7 @@ pub struct GameEmbedsBuilder {
     pub enemies: Option<Embed>,
     pub log: Option<Embed>,
     pub players: Option<Embed>,
-    pub controls: ArrayVec<ActionRow, 2>,
+    pub controls: Vec<ActionRow>,
 }
 
 impl GameEmbedsBuilder {
@@ -111,64 +128,70 @@ impl GameEmbedsBuilder {
     }
 
     pub fn build(self, finished: bool) -> GameEmbeds {
-        let mut embeds = GameEmbeds::new();
+        let mut upper_message = GameMessageEmbeds::new();
+        let mut lower_message = GameMessageEmbeds::new();
         if !finished {
             if let Some(title) = self.title {
-                embeds.upper_embeds.push(title);
+                upper_message.embeds.push(title);
             }
             if let Some(enemies) = self.enemies {
-                embeds.upper_embeds.push(enemies);
+                upper_message.embeds.push(enemies);
             }
 
             for action_row in self.controls {
-                embeds.controls.push(Component::ActionRow(action_row));
+                upper_message.controls.push(Component::ActionRow(action_row));
             }
 
             if let Some(log) = self.log {
-                embeds.lower_embeds.push(log);
+                lower_message.embeds.push(log);
             }
             if let Some(players) = self.players {
-                embeds.lower_embeds.push(players);
+                lower_message.embeds.push(players);
             }
         } else {
             if let Some(title) = self.title {
-                embeds.lower_embeds.push(title);
+                lower_message.embeds.push(title);
             }
         }
-        embeds
+        GameEmbeds::new(upper_message.to_option(), lower_message.to_option())
     }
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct GameEmbeds {
-    pub upper_embeds: ArrayVec<Embed, 2>,
-    pub controls: ArrayVec<Component, 2>,
-    pub lower_embeds: ArrayVec<Embed, 2>,
+pub struct GameMessageEmbeds {
+    pub embeds: Vec<Embed>,
+    pub controls: Vec<Component>,
 }
 
-impl GameEmbeds {
+impl GameMessageEmbeds {
     fn new() -> Self {
         Self::default()
     }
 
+    fn to_option(self) -> Option<Self> {
+        if self.embeds.is_empty() && self.controls.is_empty() {
+            None
+        } else {
+            Some(self)
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, new)]
+pub struct GameEmbeds {
+    pub upper_message: Option<GameMessageEmbeds>,
+    pub lower_message: Option<GameMessageEmbeds>,
+}
+
+impl GameEmbeds {
     pub fn builder() -> GameEmbedsBuilder {
         GameEmbedsBuilder::new()
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, new)]
 pub struct GameRenderMessage {
     pub guild_id: Id<GuildMarker>,
     pub game_id: GameId,
     pub embeds: GameEmbeds,
-}
-
-impl GameRenderMessage {
-    pub fn new(guild_id: Id<GuildMarker>, game_id: GameId, embeds: GameEmbeds) -> Self {
-        Self {
-            guild_id,
-            game_id,
-            embeds,
-        }
-    }
 }
