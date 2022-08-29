@@ -59,8 +59,7 @@ pub fn listen(
                 InputEvent::GameStart(ev) => {
                     let should_start_new_game = match games.get(&ev.guild) {
                         Some(game) => {
-                            game.status == GameStatus::Lost
-                                || elapsed_since(&game.start_time) > 60 * 60
+                            elapsed_since(&game.start_time) > 60 * 60
                         }
                         None => true,
                     };
@@ -286,7 +285,7 @@ pub fn process_bygone_part_death(
                     attack.modify_accuracy(-40);
                 }
                 BygonePart::Gun => {
-                    attack.modify_accuracy(-30);
+                    attack.modify_accuracy(-25);
                 }
                 BygonePart::LeftWing | BygonePart::RightWing => {
                     parts

@@ -33,8 +33,8 @@ impl Bygone03Bundle {
     ) -> Self {
         let wings_hp = rng.usize(min_parts_health..=max_parts_health);
         let parts = BygoneParts(enum_map! {
-            BygonePart::Core => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 80),
-            BygonePart::Sensor => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 70),
+            BygonePart::Core => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 70),
+            BygonePart::Sensor => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 80),
             BygonePart::Gun => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 50),
             BygonePart::LeftWing => Vitality::new(wings_hp, 30),
             BygonePart::RightWing => Vitality::new(wings_hp, 30),
