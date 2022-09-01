@@ -142,6 +142,7 @@ pub fn turn_timer(
     mut ev_enemy_attack: EventWriter<EnemyAttackEvent>,
     mut ev_game_draw: EventWriter<GameDrawEvent>,
     mut ev_turn_end: EventWriter<TurnEndEvent>,
+    mut ev_progress_bar_update: EventWriter<ProgressBarUpdateEvent>,
 ) {
     for (guild_id, timer) in timers.iter_mut() {
         if timer.enemy_attack() {
@@ -150,6 +151,9 @@ pub fn turn_timer(
         if timer.turn_end() {
             ev_turn_end.send(TurnEndEvent::new(*guild_id));
             ev_game_draw.send(GameDrawEvent::new(*guild_id));
+        }
+        if let Some(progress) = timer.progress_bar_update() {
+            ev_progress_bar_update.send(ProgressBarUpdateEvent::new(*guild_id, progress));
         }
     }
 
@@ -443,10 +447,22 @@ pub fn render(
     ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
     ResMut<GlobalRng>,
     EventReader<GameDrawEvent>,
+    EventReader<ProgressBarUpdateEvent>,
     Query<(&PlayerName, &GuildIdComponent, &Vitality), (With<Player>,)>,
     Query<(&GuildIdComponent, &BygoneParts, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
-    move |games, mut battle_log, mut rng, mut ev_game_draw, all_players, enemies| {
+    move |games, mut battle_log, mut rng, mut ev_game_draw, mut ev_progress_bar_update, all_players, enemies| {
+        for ProgressBarUpdateEvent { guild_id, progress } in ev_progress_bar_update.iter() {
+            if let Some(game) = games.get(guild_id) {
+                if let Ok(ref mut sender_lock) = sender.lock() {
+                    sender_lock.send(GameRenderEvent {
+                        guild_id: *guild_id,
+                        loc: game.localization.clone(),
+                        payload: GameRenderPayload::TurnProgress(*progress),
+                    });
+                }
+            }
+        }
         for GameDrawEvent { guild_id } in ev_game_draw.iter() {
             if let Some(game) = games.get(guild_id) {
                 let game_render_ev = if let Some(finished_status) = game.status.into() {

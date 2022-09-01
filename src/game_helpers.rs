@@ -21,17 +21,22 @@ pub struct GameTimer {
     start: Instant,
     enemy_attacked: bool,
     turn_ended: bool,
+    progress_bar_ticks: u64,
 }
 
 impl GameTimer {
-    const TURN_DURATION: Duration = Duration::from_secs(10);
-    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(9500);
+    const TURN_DURATION_SECS: u64 = 10;
+    const PROGRESS_BAR_TICK_SECS: u64 = 2;
+
+    const TURN_DURATION: Duration = Duration::from_secs(Self::TURN_DURATION_SECS);
+    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(Self::TURN_DURATION_SECS*1000 - 500);
 
     pub fn new() -> Self {
         Self {
             start: Instant::now(),
             enemy_attacked: false,
             turn_ended: false,
+            progress_bar_ticks: 0,
         }
     }
 
@@ -40,7 +45,7 @@ impl GameTimer {
     }
 
     pub fn enemy_attack(&mut self) -> bool {
-        if self.enemy_attacked || self.start.elapsed() < Self::ENEMY_ATTACK_DELAY {
+        if self.timer_finished() || self.enemy_attacked || self.start.elapsed() < Self::ENEMY_ATTACK_DELAY {
             false
         } else {
             self.enemy_attacked = true;
@@ -49,12 +54,32 @@ impl GameTimer {
     }
 
     pub fn turn_end(&mut self) -> bool {
-        if self.turn_ended || self.start.elapsed() < Self::TURN_DURATION {
+        if self.turn_ended || !self.timer_finished() {
             false
         } else {
             self.turn_ended = true;
             true
         }
+    }
+
+    pub fn progress_bar_update(&mut self) -> Option<f32> {
+        if self.timer_finished() {
+            return None;
+        }
+        let elapsed = self.start.elapsed().as_secs();
+        let next_progress_bar_pos = (
+            (self.progress_bar_ticks + 1) * Self::PROGRESS_BAR_TICK_SECS
+        ).min(Self::TURN_DURATION_SECS);
+        if elapsed >= next_progress_bar_pos {
+            self.progress_bar_ticks += 1 + (elapsed - next_progress_bar_pos) / Self::PROGRESS_BAR_TICK_SECS;
+            Some((elapsed as f32 / Self::TURN_DURATION_SECS as f32).max(0.0).min(1.0))
+        } else {
+            None
+        }
+    }
+
+    fn timer_finished(&self) -> bool {
+        self.start.elapsed() > Self::TURN_DURATION
     }
 }
 

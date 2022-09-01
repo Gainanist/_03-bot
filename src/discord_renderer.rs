@@ -16,7 +16,7 @@ fn get_button_style(health: &Health) -> ButtonStyle {
     }
 }
 
-fn make_button(emoji: &str, health: &Health) -> Component {
+fn make_controls_button(emoji: &str, health: &Health) -> Component {
     Component::Button(Button {
         custom_id: Some(emoji.to_owned()),
         disabled: !health.alive(),
@@ -91,11 +91,11 @@ impl DiscordRenderer {
                 println!("Rendering ongoing game in guild {}", ev.guild_id);
                 Ok(Self::render_ongoing_game(&ev.loc, &payload))
             },
-            GameRenderPayload::FinishedGame(status) => {
+            GameRenderPayload::FinishedGame(_) => {
                 Err(GameRenderError::new(ev.guild_id, "can't render finished game without previous rendered game".to_owned()))
             },
-            GameRenderPayload::TurnProgress(progress) => {
-                Err(GameRenderError::new(ev.guild_id, "can't render ruen progress without previous rendered game".to_owned()))
+            GameRenderPayload::TurnProgress(_) => {
+                Err(GameRenderError::new(ev.guild_id, "can't render turn progress without previous rendered game".to_owned()))
             },
         }
     }
@@ -122,7 +122,7 @@ impl DiscordRenderer {
             .description(&loc.title)
             .image(
                 ImageSource::url(
-                    "http://www.uof7.com/wp-content/uploads/2016/09/15-Bygone-UPD.gif",
+                    "https://cdn.discordapp.com/attachments/924690917108121661/1015027218264641556/bygone_03_cropped.gif"
                 )
                 .unwrap(),
             )
@@ -158,14 +158,14 @@ impl DiscordRenderer {
         let controls = vec! [
             Component::ActionRow(ActionRow {
                 components: vec! [
-                    make_button("🇸", payload.bygone_parts[BygonePart::Sensor].health()),
-                    make_button("🇨", payload.bygone_parts[BygonePart::Core].health()),
-                    make_button("🇬", payload.bygone_parts[BygonePart::Gun].health()),
+                    make_controls_button("🇸", payload.bygone_parts[BygonePart::Sensor].health()),
+                    make_controls_button("🇨", payload.bygone_parts[BygonePart::Core].health()),
+                    make_controls_button("🇬", payload.bygone_parts[BygonePart::Gun].health()),
                 ],
             }),
             Component::ActionRow(ActionRow {
                 components: vec! [
-                    make_button("🇷", payload.bygone_parts[BygonePart::RightWing].health()),
+                    make_controls_button("🇷", payload.bygone_parts[BygonePart::RightWing].health()),
                     Component::Button(Button {
                         custom_id: Some("status".to_owned()),
                         disabled: true,
@@ -174,7 +174,7 @@ impl DiscordRenderer {
                         style: ButtonStyle::Secondary,
                         url: None,
                     }),
-                    make_button("🇱", payload.bygone_parts[BygonePart::LeftWing].health()),
+                    make_controls_button("🇱", payload.bygone_parts[BygonePart::LeftWing].health()),
                 ],
             }),
         ];
@@ -185,7 +185,7 @@ impl DiscordRenderer {
         };
 
         let turn_progress = EmbedBuilder::new()
-            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, "[        ]"))
+            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, "[▯▯▯▯▯▯▯▯]"))
             .build();
 
         let battle_log_contents = " • ".to_string() + &payload.battle_log_lines.join("\n • ");
@@ -202,7 +202,7 @@ impl DiscordRenderer {
         let players = players_embed_builder.build();
 
         let lower_message = RenderedMessagePure {
-            embeds: vec! [ log, players ],
+            embeds: vec! [ turn_progress, log, players ],
             components: Vec::new(),
         };
 
@@ -227,11 +227,10 @@ impl DiscordRenderer {
 
     fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
         if let RenderedMessage::Message(mut lower_message) = previous.lower_message.clone() {
-            let filled_count = ((progress / 0.1).round() as isize).max(0).min(7) as usize;
+            let filled_count = ((progress / 0.1).round() as isize).max(0).min(8) as usize;
             let progress_bar = match filled_count {
                 0 => "[        ]".to_owned(),
-                1 => "[>       ]".to_owned(),
-                2..=7 => format!("[{}>{}]", "▮".to_owned().repeat(filled_count), " ".to_owned().repeat(7 - filled_count)),
+                1..=8 => format!("[{}>{}]", "▮".to_owned().repeat(filled_count - 1), "▯".to_owned().repeat(8 - filled_count)),
                 _ => "[▮▮▮▮▮▮▮>]".to_owned(),
             };
             let progress_bar_embed = EmbedBuilder::new()
