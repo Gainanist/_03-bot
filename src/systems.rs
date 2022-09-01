@@ -60,7 +60,7 @@ pub fn listen(
                 InputEvent::GameStart(ev) => {
                     let should_start_new_game = match games.get(&ev.guild) {
                         Some(game) => {
-                            elapsed_since(&game.start_time) > 60 * 60
+                            elapsed_since(&game.start_time) > 10 * 60
                         }
                         None => true,
                     };
