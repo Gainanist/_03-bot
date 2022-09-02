@@ -339,22 +339,22 @@ impl DiscordClient {
                         if let Some((lower_message_id, cached)) = messages.remove(&guild_id) {
                             match try_update_message(ev, cached, &http_write, &interaction_ids, lower_message_id, guild_id, &mut messages).await {
                                 Ok(()) => println!(
-                                    "Successfully updated a game message in guild {}",
+                                    "Successfully updated a message in guild {}",
                                     guild_id
                                 ),
                                 Err(err) => println!(
-                                    "Error updating a game message in guild {}: {}",
+                                    "Error updating a message in guild {}: {}",
                                     guild_id, err
                                 ),
                             }
                         } else {
                             match try_create_message(ev, &http_write, &interaction_ids, guild_id, &mut messages).await {
                                 Ok(()) => println!(
-                                    "Successfully created a game message in guild {}",
+                                    "Successfully created a message in guild {}",
                                     guild_id
                                 ),
                                 Err(err) => println!(
-                                    "Error creating a game message in guild {}: {}",
+                                    "Error creating a message in guild {}: {}",
                                     guild_id, err
                                 ),
 

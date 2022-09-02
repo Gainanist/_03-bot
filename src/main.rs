@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     App::new()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(100)))
-        .insert_resource(EventDelay(Duration::from_millis(150)))
+        .insert_resource(EventDelay(Duration::from_millis(500)))
         .insert_resource(games)
         // .insert_resource(scoreboard)
         .insert_resource(HashMap::<Id<GuildMarker>, Vec<String>>::new())
