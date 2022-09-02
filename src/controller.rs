@@ -130,7 +130,7 @@ pub async fn create_game_message(
 ) -> Result<Id<MessageMarker>, Box<dyn Error + Send + Sync>> {
     println!("Creating game message with interaction id {}", interaction.id);
     create_message(http, rendered_game.upper_message, &interaction).await?;
-    let lower_message_id = http.interaction(interaction.app_id)
+    let followup_id = http.interaction(interaction.app_id)
         .create_followup(&interaction.token)
         .embeds(&rendered_game.lower_message.embeds)?
         .components(&rendered_game.lower_message.components)?
@@ -139,13 +139,13 @@ pub async fn create_game_message(
         .model()
         .await?
         .id;
-    Ok(lower_message_id)
+    Ok(followup_id)
 }
 
 pub async fn update_game_message(
     http: &Client,
     interaction: &InteractionIds,
-    lower_message_id: Id<MessageMarker>,
+    followup_id: Id<MessageMarker>,
     rendered_game: &RenderedGame,
 ) -> Result<Option<Id<MessageMarker>>, Box<dyn Error + Send + Sync>> {
     println!("Updating game message with interaction id {}", interaction.id);
@@ -170,7 +170,7 @@ pub async fn update_game_message(
     match &rendered_game.lower_message {
         RenderedMessage::Message(message) => {
             http.interaction(interaction.app_id)
-                .update_followup(&interaction.token, lower_message_id)
+                .update_followup(&interaction.token, followup_id)
                 .embeds(Some(&message.embeds))?
                 .components(Some(&message.components))?  // Components are cleared with an empty slice, None does nothing for them
                 .exec()
@@ -178,7 +178,7 @@ pub async fn update_game_message(
         },
         RenderedMessage::Delete => {
             http.interaction(interaction.app_id)
-                .delete_followup(&interaction.token, lower_message_id)
+                .delete_followup(&interaction.token, followup_id)
                 .exec()
                 .await?;
             deleted = true;
@@ -189,6 +189,28 @@ pub async fn update_game_message(
     if deleted {
         Ok(None)
     } else {
-        Ok(Some(lower_message_id))
+        Ok(Some(followup_id))
     }
+}
+
+pub async fn update_game_message_pure(
+    http: &Client,
+    interaction: &InteractionIds,
+    followup_id: Id<MessageMarker>,
+    rendered_game: &RenderedGamePure,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    println!("Updating pure game message with interaction id {}", interaction.id);
+    http.interaction(interaction.app_id)
+        .update_response(&interaction.token)
+        .embeds(Some(&rendered_game.upper_message.embeds))?
+        .components(Some(&rendered_game.upper_message.components))?  // Components are cleared with an empty slice, None does nothing for them
+        .exec()
+        .await?;
+    http.interaction(interaction.app_id)
+        .update_followup(&interaction.token, followup_id)
+        .embeds(Some(&rendered_game.lower_message.embeds))?
+        .components(Some(&rendered_game.lower_message.components))?  // Components are cleared with an empty slice, None does nothing for them
+        .exec()
+        .await?;
+    Ok(())
 }

@@ -24,12 +24,12 @@ use twilight_model::{id::{
 
 use crate::{
     command_parser::{is_game_starting, BYGONE_PARTS_FROM_EMOJI_NAME},
-    controller::{start_game, process_interaction, update_game_message, create_game_message, create_message},
-    events::{InputEvent, GameRenderEvent},
+    controller::{start_game, process_interaction, update_game_message, create_game_message, create_message, update_game_message_pure},
+    events::{InputEvent, GameRenderEvent, GameRenderPayload},
     localization::Localizations, discord_renderer::{DiscordRenderer, RenderedGame, RenderedMessage, DiscordRendererPureResult, DiscordRendererResult}, game_helpers::InteractionIds,
 };
 
-fn merge_with_cached(rendered_game: RenderedGame, mut cached: RenderedGame) -> RenderedGame {
+fn merge_with_cached(rendered_game: RenderedGame, cached: &mut RenderedGame) {
     match rendered_game.upper_message {
         RenderedMessage::Message(message) => {
             cached.upper_message = message.into();
@@ -48,54 +48,6 @@ fn merge_with_cached(rendered_game: RenderedGame, mut cached: RenderedGame) -> R
             cached.lower_message = RenderedMessage::Delete;
         },
     }
-
-    cached
-}
-
-async fn try_update_message(
-    ev: GameRenderEvent,
-    cached: RenderedGame,
-    http: &HttpClient,
-    interaction: &InteractionIds,
-    lower_message_id: Id<MessageMarker>,
-    guild_id: Id<GuildMarker>,
-    messages: &mut HashMap<Id<GuildMarker>, (Id<MessageMarker>, RenderedGame)>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let interaction_id = interaction.id;
-    match DiscordRenderer::render_with_previous(ev, &cached)? {
-        DiscordRendererResult::Game(rendered_game) => {
-            if let Some(followup_id) = update_game_message(http, interaction, lower_message_id, &rendered_game).await? {
-                println!("discord_client: Updating game message with interaction id {}, new interaction id: {}", interaction_id, interaction.id);
-                messages.insert(guild_id, (followup_id, merge_with_cached(rendered_game, cached)));
-                println!("discord_client: Deleting game message with interaction id {}", interaction_id);
-            }
-        }
-        DiscordRendererResult::Oneshot(oneshot_message) => {
-            println!("discord_client: Creating oneshot message with interaction id {}", interaction_id);
-            messages.insert(guild_id, (lower_message_id, cached));
-            create_message(http, oneshot_message, &interaction).await?;
-        }
-    }
-    Ok(())
-}
-
-async fn try_create_message(
-    ev: GameRenderEvent,
-    http: &HttpClient,
-    interaction: &InteractionIds,
-    guild_id: Id<GuildMarker>,
-    messages: &mut HashMap<Id<GuildMarker>, (Id<MessageMarker>, RenderedGame)>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match DiscordRenderer::render(ev)? {
-        DiscordRendererPureResult::Game(rendered_game) => {
-            let followup_id = create_game_message(http, rendered_game.clone(), interaction).await?;
-            messages.insert(guild_id, (followup_id, rendered_game.into())); 
-        }
-        DiscordRendererPureResult::Oneshot(oneshot_message) => {
-            create_message(http, oneshot_message, &interaction).await?;
-        }
-    }    
-    Ok(())
 }
 
 pub struct DiscordClient {
@@ -241,9 +193,7 @@ impl DiscordClient {
         &self,
         mut events: Events,
     ) -> Result<(Receiver<InputEvent>, Receiver<InteractionIds>), Box<dyn Error + Send + Sync>> {
-        let game_channel_ids_input = Arc::clone(&self.game_channel_ids);
         let http = Arc::clone(&self.http_read);
-        let me = self.http_write.current_user().exec().await?.model().await?;
         let (input_sender, input_receiver) = unbounded();
         let (interaction_sender, interaction_receiver) = unbounded();
 
@@ -256,7 +206,7 @@ impl DiscordClient {
                         println!("Connected on shard {}", shard_id);
                     }
                     Event::InteractionCreate(interaction) if interaction.kind == InteractionType::MessageComponent => {
-                        println!("Received InteractionCreate event of type MessageComponent");
+                        println!("Received InteractionCreate event of type MessageComponent, id {}", interaction.id);
                         let http = Arc::clone(&http);
                         let interaction_clone = interaction.clone();
                         let response = InteractionResponse {
@@ -277,7 +227,7 @@ impl DiscordClient {
                         }
                     }
                     Event::InteractionCreate(interaction) if interaction.kind == InteractionType::ApplicationCommand => {
-                        println!("Received InteractionCreate event of type ApplicationCommand");
+                        println!("Received InteractionCreate event of type ApplicationCommand, id {}", interaction.id);
                         if let (
                             Some(guild_id),
                             Some(InteractionData::ApplicationCommand(ref command))
@@ -336,28 +286,93 @@ impl DiscordClient {
                     }
 
                     if let Some(interaction_ids) = interaction_ids {
-                        if let Some((lower_message_id, cached)) = messages.remove(&guild_id) {
-                            match try_update_message(ev, cached, &http_write, &interaction_ids, lower_message_id, guild_id, &mut messages).await {
-                                Ok(()) => println!(
-                                    "Successfully updated a message in guild {}",
-                                    guild_id
-                                ),
-                                Err(err) => println!(
-                                    "Error updating a message in guild {}: {}",
-                                    guild_id, err
-                                ),
+                        match ev.payload {
+                            GameRenderPayload::OngoingGame(payload) => {
+                                let rendered_game = DiscordRenderer::render_ongoing_game(&ev.loc, &payload);
+                                match messages.get_mut(&guild_id) {
+                                    Some((cached_interaction_id, followup_id, cached))
+                                    if interaction_ids.id == *cached_interaction_id => {
+                                        match update_game_message_pure(&http_write, &interaction_ids, *followup_id, &rendered_game).await {
+                                            Ok(()) => {
+                                                println!("discord_client: Updated game message with interaction id {}", interaction_ids.id);
+                                                merge_with_cached(rendered_game.into(), cached);
+                                            },
+                                            Err(err) => {
+                                                println!("discord_client: ERROR updating game message with interaction id {}: {}", interaction_ids.id, err);
+                                            },
+                                        }
+                                    }
+                                    _ => {
+                                        match create_game_message(&http_write, rendered_game.clone(), &interaction_ids).await {
+                                            Ok(followup_id) => {
+                                                println!("discord_client: Created game message with interaction id {}", interaction_ids.id);
+                                                messages.insert(guild_id, (interaction_ids.id, followup_id, rendered_game.into()));
+                                            }
+                                            Err(err) => {
+                                                println!("discord_client: ERROR creating game message with interaction id {}: {}", interaction_ids.id, err);
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                        } else {
-                            match try_create_message(ev, &http_write, &interaction_ids, guild_id, &mut messages).await {
-                                Ok(()) => println!(
-                                    "Successfully created a message in guild {}",
-                                    guild_id
-                                ),
-                                Err(err) => println!(
-                                    "Error creating a message in guild {}: {}",
-                                    guild_id, err
-                                ),
-
+                            GameRenderPayload::FinishedGame(status) => {
+                                let rendered_game = DiscordRenderer::render_finished_game(&ev.loc, status);
+                                let mut remove = false;
+                                match messages.get(&guild_id) {
+                                    Some((cached_interaction_id, followup_id, _cached))
+                                    if interaction_ids.id == *cached_interaction_id => {
+                                        remove = true;
+                                        match update_game_message(&http_write, &interaction_ids, *followup_id, &rendered_game).await {
+                                            Ok(_) => {
+                                                println!("discord_client: Cleanup rendered game cache with interaction id {}", interaction_ids.id);
+                                            }
+                                            Err(err) => {
+                                                println!("discord_client: ERROR updating finished game with interaction id {}: {}", interaction_ids.id, err);
+                                            },
+                                        }
+                                    }
+                                    _ => {
+                                        println!("discord_client: ERROR updating finished game with interaction id {}: cache not found", interaction_ids.id);
+                                    }
+                                }
+                                if remove {
+                                    messages.remove(&guild_id);
+                                }
+                            }
+                            GameRenderPayload::TurnProgress(progress) => {
+                                match messages.get_mut(&guild_id) {
+                                    Some((cached_interaction_id, followup_id, cached))
+                                    if interaction_ids.id == *cached_interaction_id => {
+                                        match DiscordRenderer::render_turn_progress(guild_id, cached, &ev.loc, progress) {
+                                            Ok(rendered_game) => {
+                                                match update_game_message(&http_write, &interaction_ids, *followup_id, &rendered_game).await {
+                                                    Ok(Some(_)) => {
+                                                        println!("discord_client: Updated progress bar with interaction id {}", interaction_ids.id);
+                                                        merge_with_cached(rendered_game, cached);
+                                                    },
+                                                    Ok(None) => {}
+                                                    Err(err) => {
+                                                        println!("discord_client: ERROR updating progress bar with interaction id {}: {}", interaction_ids.id, err);
+                                                    },
+                                                }
+                                            },
+                                            Err(err) => {
+                                                println!("discord_client: ERROR updating progress bar with interaction id {}: {}", interaction_ids.id, err);
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        println!("discord_client: ERROR updating progress bar with interaction id {}: cache not found", interaction_ids.id);
+                                    }
+                                }
+                            }
+                            GameRenderPayload::OneshotMessage(oneshot_type) => {
+                                let oneshot_message = DiscordRenderer::render_oneshot(oneshot_type, &ev.loc);
+                                match create_message(&http_write, oneshot_message, &interaction_ids).await {
+                                    Ok(()) => println!("discord_client: Created oneshot message with interaction id {}", interaction_ids.id),
+                                    Err(err) =>
+                                        println!("discord_client: ERROR creating oneshot message with interaction id {}: {}", interaction_ids.id, err),
+                                }
                             }
                         }
                     }

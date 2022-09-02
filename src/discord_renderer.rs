@@ -108,59 +108,7 @@ pub enum DiscordRendererResult {
 pub struct DiscordRenderer;
 
 impl DiscordRenderer {
-    pub fn render(ev: GameRenderEvent) -> Result<DiscordRendererPureResult, GameRenderError> {
-        match ev.payload {
-            GameRenderPayload::OngoingGame(payload) => {
-                println!("Rendering ongoing game in guild {}", ev.guild_id);
-                Ok(DiscordRendererPureResult::Game(
-                    Self::render_ongoing_game(&ev.loc, &payload)
-                ))
-            }
-            GameRenderPayload::FinishedGame(_) => {
-                Err(GameRenderError::new(ev.guild_id, "can't render finished game without previous rendered game".to_owned()))
-            }
-            GameRenderPayload::TurnProgress(_) => {
-                Err(GameRenderError::new(ev.guild_id, "can't render turn progress without previous rendered game".to_owned()))
-            }
-            GameRenderPayload::OneshotMessage(oneshot_type) => {
-                println!("Rendering oneshot message in guild {}", ev.guild_id);
-                Ok(DiscordRendererPureResult::Oneshot(
-                    Self::render_oneshot(oneshot_type, &ev.loc)
-                ))
-            }
-        }
-    }
-
-    pub fn render_with_previous(ev: GameRenderEvent, previous: &RenderedGame) -> Result<DiscordRendererResult, GameRenderError> {
-        match ev.payload {
-            GameRenderPayload::OngoingGame(payload) => {
-                println!("Rendering ongoing game in guild {}", ev.guild_id);
-                Ok(DiscordRendererResult::Game(
-                    Self::render_ongoing_game(&ev.loc, &payload).into()
-                ))
-            }
-            GameRenderPayload::FinishedGame(status) => {
-                println!("Rendering finished game in guild {}", ev.guild_id);
-                Ok(DiscordRendererResult::Game(
-                    Self::render_finished_game(&ev.loc, status)
-                ))
-            }
-            GameRenderPayload::TurnProgress(progress) => {
-                println!("Rendering turn progress in guild {}", ev.guild_id);
-                Ok(DiscordRendererResult::Game(
-                    Self::render_turn_progress(ev.guild_id, previous, &ev.loc, progress)?
-                ))
-            }
-            GameRenderPayload::OneshotMessage(oneshot_type) => {
-                println!("Rendering oneshot message in guild {}", ev.guild_id);
-                Ok(DiscordRendererResult::Oneshot(
-                    Self::render_oneshot(oneshot_type, &ev.loc)
-                ))
-            }
-        }
-    }
-
-    fn render_ongoing_game(loc: &Localization, payload: &OngoingGamePayload) -> RenderedGamePure {
+    pub fn render_ongoing_game(loc: &Localization, payload: &OngoingGamePayload) -> RenderedGamePure {
         let title = EmbedBuilder::new()
             .description(&loc.title)
             .image(
@@ -252,7 +200,7 @@ impl DiscordRenderer {
         RenderedGamePure { upper_message, lower_message }
     }
 
-    fn render_finished_game(loc: &Localization, status: FinishedGameStatus) -> RenderedGame {
+    pub fn render_finished_game(loc: &Localization, status: FinishedGameStatus) -> RenderedGame {
         let message = match status {
             FinishedGameStatus::Won => &loc.won.0,
             FinishedGameStatus::Lost => &loc.lost.0,
@@ -268,7 +216,7 @@ impl DiscordRenderer {
         }
     }
 
-    fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
+    pub fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
         if let RenderedMessage::Message(mut lower_message) = previous.lower_message.clone() {
             let filled_count = ((progress * PROGRESS_BAR_SCALE).round().max(0.0) as usize).min(PROGRESS_BAR_SIZE);
             let progress_bar = render_turn_timer(filled_count, PROGRESS_BAR_SIZE);
@@ -291,7 +239,7 @@ impl DiscordRenderer {
         }
     }
 
-    fn render_oneshot(oneshot_type: OneshotType, loc: &Localization) -> RenderedMessagePure {
+    pub fn render_oneshot(oneshot_type: OneshotType, loc: &Localization) -> RenderedMessagePure {
         let oneshot_message = match oneshot_type {
             OneshotType::Cooldown(duration_left) => loc.battle_cooldown.insert_duration(&duration_left),
             OneshotType::OtherGameInProgress => loc.other_battle_ongoing.clone(),
