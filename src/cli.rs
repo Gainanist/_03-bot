@@ -5,10 +5,14 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct Cli {
-    /// SAved games file
+    /// Saved games file
     #[clap(short, long, value_parser, value_name = "FILE")]
     pub games_path: PathBuf,
     // /// Scoreboard file
     // #[clap(short, long, value_parser, value_name = "FILE")]
-    // pub scoreboard_path: PathBuf,
+    // pub scoreboard_path: PathBuf,\
+    /// Update bot commands
+    #[clap(short, long, action)]
+    pub update_commands: bool,
+
 }

@@ -30,7 +30,7 @@ use events::EventsPlugin;
 
 use game_helpers::{EventDelay, Game};
 
-use std::sync::mpsc;
+use crossbeam_channel::unbounded;
 
 use crate::cli::Cli;
 use crate::systems::*;
@@ -49,14 +49,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
     let (client, events) = DiscordClient::new(token).await?;
     client.startup();
-    let input_receiver = client.listen_discord(events).await?;
-    let output_sender = client.listen_game().await;
+    let (input_receiver, interaction_receiver) = client.listen_discord(events).await?;
+    let output_sender = client.listen_game(interaction_receiver).await;
 
     let cli = Cli::parse();
     let games = read_json::<HashMap<Id<GuildMarker>, Game>>(&cli.games_path);
     // let scoreboard = read_json::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>(&cli.scoreboard_path);
-    let (games_sender, games_receiver) = mpsc::channel::<HashMap<Id<GuildMarker>, Game>>();
+    let (games_sender, games_receiver) = unbounded::<HashMap<Id<GuildMarker>, Game>>();
     let games_path = cli.games_path.clone();
+
+    if cli.update_commands {
+        client.register_commands()
+    }
 
     tokio::spawn(async move {
         loop {
@@ -64,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
-    // let (scoreboard_sender, scoreboard_receiver) = mpsc::channel::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>();
+    // let (scoreboard_sender, scoreboard_receiver) = unbounded::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>();
     // let scoreboard_path = cli.scoreboard_path.clone();
 
     // tokio::spawn(async move {
@@ -84,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_plugin(EventsPlugin::default())
-        .add_system(listen(Mutex::new(input_receiver)).before(render_label))
+        .add_system(listen(Mutex::new(input_receiver), Mutex::new(output_sender.clone())).before(render_label))
         .add_system(delay_events.before(render_label))
         .add_system(turn_timer.before(render_label))
         .add_system(spawn_bygones.before(render_label))

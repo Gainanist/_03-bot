@@ -1,10 +1,10 @@
 use std::{
     fs, io,
     path::{Path, PathBuf},
-    sync::mpsc::Receiver,
     time::Duration,
 };
 
+use crossbeam_channel::Receiver;
 use serde::{de::DeserializeOwned, Serialize};
 
 pub fn read_json<T: Default + DeserializeOwned>(path: &PathBuf) -> T {

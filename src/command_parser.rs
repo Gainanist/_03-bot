@@ -1,16 +1,31 @@
 use phf::phf_ordered_map;
+use twilight_model::application::{interaction::application_command::{CommandData, CommandOptionValue}, command::CommandType};
 
-use crate::{components::BygonePart, localization::Language};
+use crate::{components::BygonePart, localization::Language, game_helpers::Difficulty};
 
-pub fn is_game_starting(source: &str) -> Option<Language> {
-    let source = source.to_lowercase();
-    if source.contains("битв") || source.contains("сраж") {
-        Some(Language::Ru)
-    } else if source.contains("battl") || source.contains("fight") {
-        Some(Language::En)
-    } else {
-        None
+pub fn is_game_starting(command: &CommandData) -> Option<(Language, Difficulty)> {
+    if command.name != "battle" {
+        return None;
     }
+    let mut language = Language::En;
+    let mut difficulty = Difficulty::Medium;
+    for option in &command.options {
+        if option.name == "language" {
+            if let CommandOptionValue::String(lang_name) = &option.value {
+                if lang_name == "ru" {
+                    language = Language::Ru;
+                }
+            }
+        }
+        if option.name == "difficulty" {
+            if let CommandOptionValue::String(level) = &option.value {
+                if let Some(level) = Difficulty::from_str(level) {
+                    difficulty = level;
+                }
+            }
+        }
+    }
+    Some((language, difficulty))
 }
 
 pub const BYGONE_PARTS_FROM_EMOJI_NAME: phf::OrderedMap<&str, BygonePart> = phf_ordered_map! {

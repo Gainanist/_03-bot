@@ -1,3 +1,5 @@
+use std::ops::RangeBounds;
+
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
 use enum_map::{enum_map, EnumMap};
@@ -7,7 +9,7 @@ use twilight_model::id::{
     Id,
 };
 
-use crate::components::*;
+use crate::{components::*, game_helpers::Difficulty};
 
 #[derive(Clone, Copy, Component, Debug, Eq, Hash, PartialEq)]
 pub struct BygoneParts(pub EnumMap<BygonePart, Vitality>);
@@ -24,22 +26,20 @@ pub struct Bygone03Bundle {
 
 impl Bygone03Bundle {
     pub fn new(
-        min_parts_health: usize,
-        max_parts_health: usize,
-        min_attack: usize,
-        max_attack: usize,
+        parts_health_range: impl RangeBounds<usize> + Clone,
+        attack_range: impl RangeBounds<usize> + Clone,
         guild: Id<GuildMarker>,
         rng: &mut GlobalRng,
     ) -> Self {
-        let wings_hp = rng.usize(min_parts_health..=max_parts_health);
+        let wings_hp = rng.usize(parts_health_range.clone());
         let parts = BygoneParts(enum_map! {
-            BygonePart::Core => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 70),
-            BygonePart::Sensor => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 80),
-            BygonePart::Gun => Vitality::new(rng.usize(min_parts_health..=max_parts_health), 50),
+            BygonePart::Core => Vitality::new(rng.usize(parts_health_range.clone()), 70),
+            BygonePart::Sensor => Vitality::new(rng.usize(parts_health_range.clone()), 80),
+            BygonePart::Gun => Vitality::new(rng.usize(parts_health_range.clone()), 50),
             BygonePart::LeftWing => Vitality::new(wings_hp, 30),
             BygonePart::RightWing => Vitality::new(wings_hp, 30),
         });
-        let attack = Attack::new(rng.usize(min_attack..=max_attack), 100);
+        let attack = Attack::new(rng.usize(attack_range), 100);
 
         Self {
             guild: GuildIdComponent(guild),
@@ -51,8 +51,20 @@ impl Bygone03Bundle {
         }
     }
 
-    pub fn with_normal_health(guild: Id<GuildMarker>, rng: &mut GlobalRng) -> Self {
-        Self::new(1, 3, 1, 3, guild, rng)
+    pub fn with_difficulty(guild: Id<GuildMarker>, difficulty: Difficulty, rng: &mut GlobalRng) -> Self {
+        let parts_health_range = match difficulty {
+            Difficulty::Easy => 1..=1,
+            Difficulty::Medium => 1..=2,
+            Difficulty::Hard => 1..=3,
+            Difficulty::RealBullets => 1..=3,
+        };
+        let attack_range = match difficulty {
+            Difficulty::Easy => 1..=1,
+            Difficulty::Medium => 1..=2,
+            Difficulty::Hard => 1..=3,
+            Difficulty::RealBullets => 6..=6,
+        };
+        Self::new(parts_health_range, attack_range, guild, rng)
     }
 }
 

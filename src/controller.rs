@@ -2,10 +2,14 @@ use std::fmt;
 use std::{
     collections::HashSet,
     error::Error,
-    sync::{mpsc::Sender, Mutex},
+    sync::{Mutex},
 };
 
+use crossbeam_channel::Sender;
 use twilight_http::{request::channel::reaction::RequestReactionType, Client};
+use twilight_model::channel::embed::Embed;
+use twilight_model::http::interaction::{InteractionResponse, InteractionResponseType, InteractionResponseData};
+use twilight_model::id::marker::InteractionMarker;
 use twilight_model::{
     channel::{Reaction, ReactionType},
     gateway::payload::incoming::MessageCreate,
@@ -16,7 +20,8 @@ use twilight_model::{
     user::{CurrentUser, User}, application::{component::{ActionRow, Component, Button, button::ButtonStyle}, interaction::{Interaction, InteractionData, message_component::MessageComponentInteractionData}}, guild::PartialMember,
 };
 
-use crate::discord_renderer::{RenderedGamePure, RenderedGame, RenderedMessage};
+use crate::discord_renderer::{RenderedGamePure, RenderedGame, RenderedMessage, RenderedMessagePure};
+use crate::game_helpers::{InteractionIds, Difficulty};
 use crate::{
     command_parser::BYGONE_PARTS_FROM_EMOJI_NAME,
     components::PlayerName,
@@ -34,6 +39,24 @@ impl fmt::Display for GameCreateError {
 }
 
 impl Error for GameCreateError {}
+
+fn make_message_interaction_response(msg: RenderedMessagePure) -> InteractionResponse {
+    InteractionResponse {
+        kind: InteractionResponseType::ChannelMessageWithSource,
+        data: Some(InteractionResponseData {
+            allowed_mentions: None,
+            attachments: None,
+            choices: None,
+            components: Some(msg.components),
+            content: None,
+            custom_id: None,
+            embeds: Some(msg.embeds),
+            flags: None,
+            title: None,
+            tts: None,
+        }),
+    }
+}
 
 pub fn process_interaction(interaction: Interaction) -> Option<InputEvent> {
     if let (
@@ -61,43 +84,54 @@ pub fn process_interaction(interaction: Interaction) -> Option<InputEvent> {
     return None;
 }
 
-pub fn start_game(sender: &Sender<InputEvent>, localization: Localization, msg: &MessageCreate) {
-    if let Some(guild) = msg.guild_id {
+pub fn start_game(sender: &Sender<InputEvent>, localization: Localization, difficulty: Difficulty, interaction: &Interaction) {
+    if let (
+        Some(PartialMember { user: Some(ref user), nick: ref user_nick, .. }),
+        Some(guild_id),
+    ) = (&interaction.member, interaction.guild_id) {
         let initial_player_name = PlayerName(
-            match &msg.member {
-                Some(member) => match &member.nick {
-                    Some(nick) => nick,
-                    None => &msg.author.name,
-                },
-                None => &msg.author.name,
+            match &user_nick {
+                Some(nick) => nick,
+                None => &user.name,
             }
             .to_string(),
         );
         sender.send(InputEvent::GameStart(GameStartEvent::new(
-            msg.author.id,
+            user.id,
             initial_player_name,
-            guild,
+            difficulty,
+            guild_id,
+            interaction.id,
             localization,
         )));
     }
 }
 
+pub async fn create_message(
+    http: &Client,
+    oneshot: RenderedMessagePure,
+    interaction: &InteractionIds,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    http.interaction(interaction.app_id)
+        .create_response(
+            interaction.id,
+            &interaction.token,
+            &make_message_interaction_response(oneshot.into()),
+        )
+        .exec()
+        .await?;
+    Ok(())
+}
+
 pub async fn create_game_message(
     http: &Client,
-    rendered_game: &RenderedGamePure,
-    channel_id: Id<ChannelMarker>,
-) -> Result<(Id<MessageMarker>, Id<MessageMarker>), Box<dyn Error + Send + Sync>> {
-    let upper_message_id = http
-        .create_message(channel_id)
-        .embeds(&rendered_game.upper_message.embeds)?
-        .components(&rendered_game.upper_message.components)?
-        .exec()
-        .await?
-        .model()
-        .await?
-        .id;
-    let lower_message_id = http
-        .create_message(channel_id)
+    rendered_game: RenderedGamePure,
+    interaction: &InteractionIds,
+) -> Result<Id<MessageMarker>, Box<dyn Error + Send + Sync>> {
+    println!("Creating game message with interaction id {}", interaction.id);
+    create_message(http, rendered_game.upper_message, &interaction).await?;
+    let lower_message_id = http.interaction(interaction.app_id)
+        .create_followup(&interaction.token)
         .embeds(&rendered_game.lower_message.embeds)?
         .components(&rendered_game.lower_message.components)?
         .exec()
@@ -105,41 +139,48 @@ pub async fn create_game_message(
         .model()
         .await?
         .id;
-    Ok((upper_message_id, lower_message_id))
+    Ok(lower_message_id)
 }
 
 pub async fn update_game_message(
     http: &Client,
-    upper_message_id: Id<MessageMarker>,
+    interaction: &InteractionIds,
     lower_message_id: Id<MessageMarker>,
     rendered_game: &RenderedGame,
-    channel_id: Id<ChannelMarker>,
-) -> Result<Option<(Id<MessageMarker>, Id<MessageMarker>)>, Box<dyn Error + Send + Sync>> {
+) -> Result<Option<Id<MessageMarker>>, Box<dyn Error + Send + Sync>> {
+    println!("Updating game message with interaction id {}", interaction.id);
     let mut deleted = false;
     match &rendered_game.upper_message {
         RenderedMessage::Message(message) => {
-            http.update_message(channel_id, upper_message_id)
+            http.interaction(interaction.app_id)
+                .update_response(&interaction.token)
                 .embeds(Some(&message.embeds))?
                 .components(Some(&message.components))?  // Components are cleared with an empty slice, None does nothing for them
                 .exec()
                 .await?;
         },
         RenderedMessage::Delete => {
-            http.delete_message(channel_id, upper_message_id).exec().await?;
-            deleted = true;
+            http.interaction(interaction.app_id)
+                .delete_response(&interaction.token)
+                .exec()
+                .await?;
         },
         RenderedMessage::Skip => {},
     }
     match &rendered_game.lower_message {
         RenderedMessage::Message(message) => {
-            http.update_message(channel_id, lower_message_id)
+            http.interaction(interaction.app_id)
+                .update_followup(&interaction.token, lower_message_id)
                 .embeds(Some(&message.embeds))?
                 .components(Some(&message.components))?  // Components are cleared with an empty slice, None does nothing for them
                 .exec()
                 .await?;
         },
         RenderedMessage::Delete => {
-            http.delete_message(channel_id, lower_message_id).exec().await?;
+            http.interaction(interaction.app_id)
+                .delete_followup(&interaction.token, lower_message_id)
+                .exec()
+                .await?;
             deleted = true;
         },
         RenderedMessage::Skip => {},
@@ -148,6 +189,6 @@ pub async fn update_game_message(
     if deleted {
         Ok(None)
     } else {
-        Ok(Some((upper_message_id, lower_message_id)))
+        Ok(Some(lower_message_id))
     }
 }

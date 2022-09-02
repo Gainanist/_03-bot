@@ -1,14 +1,16 @@
+use std::time::Duration;
+
 use bevy::prelude::*;
 use derive_new::new;
 use enum_map::EnumMap;
 use twilight_model::id::{
-    marker::{GuildMarker, UserMarker},
+    marker::{GuildMarker, UserMarker, InteractionMarker},
     Id,
 };
 
 use crate::{
     components::{BygonePart, PlayerName, Bygone03Stage, Attack, Vitality},
-    localization::Localization, bundles::BygoneParts, game_helpers::FinishedGameStatus,
+    localization::Localization, bundles::BygoneParts, game_helpers::{FinishedGameStatus, Difficulty},
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -37,7 +39,9 @@ pub struct EnemyAttackEvent {
 pub struct GameStartEvent {
     pub initial_player: Id<UserMarker>,
     pub initial_player_name: PlayerName,
+    pub difficulty: Difficulty,
     pub guild: Id<GuildMarker>,
+    pub interaction: Id<InteractionMarker>,
     pub localization: Localization,
 }
 
@@ -113,16 +117,24 @@ pub struct OngoingGamePayload {
     pub players: Vec<(PlayerName, Vitality)>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum OneshotType {
+    Cooldown(Duration),
+    OtherGameInProgress,
+}
+
 #[derive(Clone, Debug)]
 pub enum GameRenderPayload {
     OngoingGame(OngoingGamePayload),
     FinishedGame(FinishedGameStatus),
     TurnProgress(f32),
+    OneshotMessage(OneshotType),
 }
 
 #[derive(Clone, Debug, new)]
 pub struct GameRenderEvent {
     pub guild_id: Id<GuildMarker>,
+    pub interaction_id: Id<InteractionMarker>,
     pub loc: Localization,
     pub payload: GameRenderPayload,
 }

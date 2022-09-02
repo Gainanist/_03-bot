@@ -2,14 +2,14 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     ops::DerefMut,
     sync::{
-        mpsc::{Receiver, Sender},
         Mutex,
     },
-    time::{Instant, SystemTime}, default,
+    time::{Instant, SystemTime, Duration}, default,
 };
 
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
+use crossbeam_channel::{Sender, Receiver};
 use enum_map::EnumMap;
 use rand::Rng;
 use twilight_model::{id::{marker::GuildMarker, Id}, application::component::{ActionRow, Component as MessageComponent, Button as MessageButton, button::ButtonStyle}, channel::ReactionType};
@@ -27,8 +27,11 @@ use crate::{
     localization::{RenderText, Localization}, command_parser::{BYGONE_PARTS_FROM_EMOJI_NAME, AUXILIARY_EMOJIS}, discord_renderer::RenderedGame,
 };
 
+const GAME_COOLDOWN_SECONDS: u64 = 10 * 60;
+
 pub fn listen(
     input_receiver: Mutex<Receiver<InputEvent>>,
+    game_render_sender: Mutex<Sender<GameRenderEvent>>,
 ) -> impl FnMut(
     ResMut<HashMap<Id<GuildMarker>, Game>>,
     ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
@@ -58,17 +61,38 @@ pub fn listen(
         for (i, event) in events.into_iter().enumerate() {
             match event {
                 InputEvent::GameStart(ev) => {
-                    let should_start_new_game = match games.get(&ev.guild) {
+                    let oneshot_type = match games.get(&ev.guild) {
                         Some(game) => {
-                            elapsed_since(&game.start_time) > 10 * 60
+                            let elapsed_since_game_start = elapsed_since(&game.start_time);
+                            if elapsed_since_game_start < GAME_COOLDOWN_SECONDS {
+                                if game.status == GameStatus::Ongoing {
+                                    Some(OneshotType::OtherGameInProgress)
+                                } else {
+                                    Some(OneshotType::Cooldown(
+                                        Duration::from_secs(GAME_COOLDOWN_SECONDS - elapsed_since_game_start)
+                                    ))
+                                }
+                            } else {
+                                None
+                            }
                         }
-                        None => true,
+                        None => None,
                     };
-                    if should_start_new_game {
+                    if let Some(oneshot_type) = oneshot_type {
+                        if let Ok(game_render_sender_lock) = game_render_sender.lock() {
+                            game_render_sender_lock.send(GameRenderEvent::new(
+                                ev.guild,
+                                ev.interaction,
+                                ev.localization.clone(),
+                                GameRenderPayload::OneshotMessage(oneshot_type),
+                            ));
+                        }
+                    } else {
                         games.insert(
                             ev.guild,
                             Game::new(
                                 GameId::from_current_time(i as u128),
+                                ev.interaction,
                                 ev.localization.clone(),
                             ),
                         );
@@ -170,8 +194,9 @@ pub fn spawn_bygones(
     mut ev_game_start: EventReader<GameStartEvent>,
 ) {
     for ev in ev_game_start.iter() {
-        commands.spawn_bundle(Bygone03Bundle::with_normal_health(
+        commands.spawn_bundle(Bygone03Bundle::with_difficulty(
             ev.guild,
+            ev.difficulty,
             &mut global_rng,
         ));
     }
@@ -457,6 +482,7 @@ pub fn render(
                 if let Ok(ref mut sender_lock) = sender.lock() {
                     sender_lock.send(GameRenderEvent {
                         guild_id: *guild_id,
+                        interaction_id: game.interaction_id,
                         loc: game.localization.clone(),
                         payload: GameRenderPayload::TurnProgress(*progress),
                     });
@@ -468,6 +494,7 @@ pub fn render(
                 let game_render_ev = if let Some(finished_status) = game.status.into() {
                     GameRenderEvent {
                         guild_id: *guild_id,
+                        interaction_id: game.interaction_id,
                         loc: game.localization.clone(),
                         payload: GameRenderPayload::FinishedGame(finished_status),
                     }
@@ -497,6 +524,7 @@ pub fn render(
 
                     GameRenderEvent {
                         guild_id: *guild_id,
+                        interaction_id: game.interaction_id,
                         loc: game.localization.clone(),
                         payload: GameRenderPayload::OngoingGame(OngoingGamePayload {
                             bygone_parts,
@@ -509,7 +537,7 @@ pub fn render(
 
                 };
 
-                if let Ok(ref mut sender_lock) = sender.lock() {
+                if let Ok(sender_lock) = sender.lock() {
                     sender_lock.send(game_render_ev);
                 }
             }

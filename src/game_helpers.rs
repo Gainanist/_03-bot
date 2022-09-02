@@ -8,12 +8,32 @@ use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use twilight_model::{
     channel::embed::Embed,
-    id::{marker::GuildMarker, Id}, application::component::{Component, ActionRow},
+    id::{marker::{GuildMarker, InteractionMarker, ApplicationMarker}, Id}, application::component::{Component, ActionRow},
 };
 
 use crate::localization::Localization;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Difficulty {
+    Easy,
+    Medium,
+    Hard,
+    RealBullets,
+}
+
+impl Difficulty {
+    pub fn from_str(difficulty: &str) -> Option<Self> {
+        match difficulty {
+            "easy" => Some(Difficulty::Easy),
+            "medium" => Some(Difficulty::Medium),
+            "hard" => Some(Difficulty::Hard),
+            "real_bullets" => Some(Difficulty::RealBullets),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct EventDelay(pub Duration);
 
 #[derive(Clone, Debug)]
@@ -123,17 +143,26 @@ impl GameId {
 pub struct Game {
     pub start_time: SystemTime,
     pub game_id: GameId,
+    pub interaction_id: Id<InteractionMarker>,
     pub localization: Localization,
     pub status: GameStatus,
 }
 
 impl Game {
-    pub fn new(game_id: GameId, localization: Localization) -> Self {
+    pub fn new(game_id: GameId, interaction_id: Id<InteractionMarker>, localization: Localization) -> Self {
         Self {
             start_time: SystemTime::now(),
             game_id,
+            interaction_id,
             localization,
             status: GameStatus::Ongoing,
         }
     }
+}
+
+#[derive(Clone, Debug, new)]
+pub struct InteractionIds {
+    pub id: Id<InteractionMarker>,
+    pub app_id: Id<ApplicationMarker>,
+    pub token: String,
 }

@@ -4,7 +4,7 @@ use derive_new::new;
 use twilight_model::{channel::{embed::Embed, ReactionType}, application::component::{Component, ActionRow, button::ButtonStyle, Button}, id::{Id, marker::GuildMarker}};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
-use crate::{events::{GameRenderEvent, GameRenderPayload, OngoingGamePayload}, game_helpers::FinishedGameStatus, localization::{Localization, RenderText}, components::{BygonePart, Health}};
+use crate::{events::{GameRenderEvent, GameRenderPayload, OngoingGamePayload, OneshotType}, game_helpers::FinishedGameStatus, localization::{Localization, RenderText}, components::{BygonePart, Health}};
 
 fn get_button_style(health: &Health) -> ButtonStyle {
     if health.current() == 0 {
@@ -27,6 +27,14 @@ fn make_controls_button(emoji: &str, health: &Health) -> Component {
     })
 }
 
+fn render_turn_timer(cur: usize, max: usize) -> String {
+    let cur = cur.min(max);
+    format!(
+        "{}{}",
+        ":red_square:".to_owned().repeat(cur),
+        ":white_large_square:".to_owned().repeat(max - cur),
+    )
+}
 #[derive(Clone, Debug, new)]
 pub struct GameRenderError {
     id: Id<GuildMarker>,
@@ -81,39 +89,71 @@ impl From<RenderedGamePure> for RenderedGame {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum DiscordRendererPureResult {
+    Game(RenderedGamePure),
+    Oneshot(RenderedMessagePure),
+}
+
+#[derive(Clone, Debug)]
+pub enum DiscordRendererResult {
+    Game(RenderedGame),
+    Oneshot(RenderedMessagePure),
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct DiscordRenderer;
 
 impl DiscordRenderer {
-    pub fn render(ev: GameRenderEvent) -> Result<RenderedGamePure, GameRenderError> {
+    pub fn render(ev: GameRenderEvent) -> Result<DiscordRendererPureResult, GameRenderError> {
         match ev.payload {
             GameRenderPayload::OngoingGame(payload) => {
                 println!("Rendering ongoing game in guild {}", ev.guild_id);
-                Ok(Self::render_ongoing_game(&ev.loc, &payload))
-            },
+                Ok(DiscordRendererPureResult::Game(
+                    Self::render_ongoing_game(&ev.loc, &payload)
+                ))
+            }
             GameRenderPayload::FinishedGame(_) => {
                 Err(GameRenderError::new(ev.guild_id, "can't render finished game without previous rendered game".to_owned()))
-            },
+            }
             GameRenderPayload::TurnProgress(_) => {
                 Err(GameRenderError::new(ev.guild_id, "can't render turn progress without previous rendered game".to_owned()))
-            },
+            }
+            GameRenderPayload::OneshotMessage(oneshot_type) => {
+                println!("Rendering oneshot message in guild {}", ev.guild_id);
+                Ok(DiscordRendererPureResult::Oneshot(
+                    Self::render_oneshot(oneshot_type, &ev.loc)
+                ))
+            }
         }
     }
 
-    pub fn render_with_previous(ev: GameRenderEvent, previous: &RenderedGame) -> Result<RenderedGame, GameRenderError> {
+    pub fn render_with_previous(ev: GameRenderEvent, previous: &RenderedGame) -> Result<DiscordRendererResult, GameRenderError> {
         match ev.payload {
             GameRenderPayload::OngoingGame(payload) => {
                 println!("Rendering ongoing game in guild {}", ev.guild_id);
-                Ok(Self::render_ongoing_game(&ev.loc, &payload).into())
-            },
+                Ok(DiscordRendererResult::Game(
+                    Self::render_ongoing_game(&ev.loc, &payload).into()
+                ))
+            }
             GameRenderPayload::FinishedGame(status) => {
                 println!("Rendering finished game in guild {}", ev.guild_id);
-                Ok(Self::render_finished_game(&ev.loc, status))
-            },
+                Ok(DiscordRendererResult::Game(
+                    Self::render_finished_game(&ev.loc, status)
+                ))
+            }
             GameRenderPayload::TurnProgress(progress) => {
                 println!("Rendering turn progress in guild {}", ev.guild_id);
-                Self::render_turn_progress(ev.guild_id, previous, &ev.loc, progress)
-            },
+                Ok(DiscordRendererResult::Game(
+                    Self::render_turn_progress(ev.guild_id, previous, &ev.loc, progress)?
+                ))
+            }
+            GameRenderPayload::OneshotMessage(oneshot_type) => {
+                println!("Rendering oneshot message in guild {}", ev.guild_id);
+                Ok(DiscordRendererResult::Oneshot(
+                    Self::render_oneshot(oneshot_type, &ev.loc)
+                ))
+            }
         }
     }
 
@@ -185,7 +225,7 @@ impl DiscordRenderer {
         };
 
         let turn_progress = EmbedBuilder::new()
-            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, "[▯▯▯▯▯▯▯▯]"))
+            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, render_turn_timer(0, 8)))
             .build();
 
         let battle_log_contents = " • ".to_string() + &payload.battle_log_lines.join("\n • ");
@@ -228,11 +268,7 @@ impl DiscordRenderer {
     fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
         if let RenderedMessage::Message(mut lower_message) = previous.lower_message.clone() {
             let filled_count = ((progress / 0.1).round() as isize).max(0).min(8) as usize;
-            let progress_bar = match filled_count {
-                0 => "[        ]".to_owned(),
-                1..=8 => format!("[{}>{}]", "▮".to_owned().repeat(filled_count - 1), "▯".to_owned().repeat(8 - filled_count)),
-                _ => "[▮▮▮▮▮▮▮>]".to_owned(),
-            };
+            let progress_bar = render_turn_timer(filled_count, 8);
             let progress_bar_embed = EmbedBuilder::new()
                 .field(EmbedFieldBuilder::new(&loc.turn_progress_title, progress_bar))
                 .build();
@@ -249,6 +285,18 @@ impl DiscordRenderer {
             })
         } else {
             Err(GameRenderError::new(id, "can't write progress bar for deleted or skipped lower message".to_owned()))
+        }
+    }
+
+    fn render_oneshot(oneshot_type: OneshotType, loc: &Localization) -> RenderedMessagePure {
+        let oneshot_message = match oneshot_type {
+            OneshotType::Cooldown(duration_left) => loc.battle_cooldown.insert_duration(&duration_left),
+            OneshotType::OtherGameInProgress => loc.other_battle_ongoing.clone(),
+        };
+        let oneshot_embed = EmbedBuilder::new().description(&oneshot_message.0).build();
+        RenderedMessagePure {
+            embeds: vec! [ oneshot_embed ],
+            components: Vec::new(),
         }
     }
 }
