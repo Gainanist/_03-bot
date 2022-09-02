@@ -154,7 +154,7 @@ impl Localizations {
                 LocalizedLine("Человек торжествует над машиной!".to_string()),
             ],
 
-            title: LocalizedLine("УНИЧ... ТОЖИТЬ.".to_string()),
+            title: LocalizedLine("УНИЧ...ТОЖИТЬ.".to_string()),
             lost: LocalizedLine("*Так темно… Я что, умер? Здесь так спокойно.*".to_string()),
             won: LocalizedLine("*Человек торжествует над машиной!*".to_string()),
             battle_cooldown: "*_03 ремонтирует себя, будет готов через {DURATION} сек*".into(),
@@ -218,7 +218,7 @@ impl Localizations {
                 LocalizedLine("Man triumphs over machine!".to_string()),
             ],
 
-            title: LocalizedLine("A wild _03 appears!".to_string()),
+            title: LocalizedLine("DES...TROY.".to_string()),
             lost: LocalizedLine("*This darkness… Am I… dead? It’s so peaceful.*".to_string()),
             won: LocalizedLine("*Man triumphs over machine!*".to_string()),
             battle_cooldown: "*_03 is repairing itself, it will be ready in {DURATION}s*".into(),
