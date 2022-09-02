@@ -6,6 +6,9 @@ use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource
 
 use crate::{events::{GameRenderEvent, GameRenderPayload, OngoingGamePayload, OneshotType}, game_helpers::FinishedGameStatus, localization::{Localization, RenderText}, components::{BygonePart, Health}};
 
+const PROGRESS_BAR_SIZE: usize = 4;
+const PROGRESS_BAR_SCALE: f32 = PROGRESS_BAR_SIZE as f32 + 1.0;
+
 fn get_button_style(health: &Health) -> ButtonStyle {
     if health.current() == 0 {
         ButtonStyle::Secondary
@@ -225,7 +228,7 @@ impl DiscordRenderer {
         };
 
         let turn_progress = EmbedBuilder::new()
-            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, render_turn_timer(0, 8)))
+            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, render_turn_timer(0, PROGRESS_BAR_SIZE)))
             .build();
 
         let battle_log_contents = " • ".to_string() + &payload.battle_log_lines.join("\n • ");
@@ -267,8 +270,8 @@ impl DiscordRenderer {
 
     fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
         if let RenderedMessage::Message(mut lower_message) = previous.lower_message.clone() {
-            let filled_count = ((progress / 0.1).round() as isize).max(0).min(8) as usize;
-            let progress_bar = render_turn_timer(filled_count, 8);
+            let filled_count = ((progress * PROGRESS_BAR_SCALE).round().max(0.0) as usize).min(PROGRESS_BAR_SIZE);
+            let progress_bar = render_turn_timer(filled_count, PROGRESS_BAR_SIZE);
             let progress_bar_embed = EmbedBuilder::new()
                 .field(EmbedFieldBuilder::new(&loc.turn_progress_title, progress_bar))
                 .build();

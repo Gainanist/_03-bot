@@ -68,12 +68,11 @@ async fn try_update_message(
                 println!("discord_client: Updating game message with interaction id {}, new interaction id: {}", interaction_id, interaction.id);
                 messages.insert(guild_id, (followup_id, merge_with_cached(rendered_game, cached)));
                 println!("discord_client: Deleting game message with interaction id {}", interaction_id);
-            } else {
-                messages.remove(&guild_id);
             }
         }
         DiscordRendererResult::Oneshot(oneshot_message) => {
             println!("discord_client: Creating oneshot message with interaction id {}", interaction_id);
+            messages.insert(guild_id, (lower_message_id, cached));
             create_message(http, oneshot_message, &interaction).await?;
         }
     }
