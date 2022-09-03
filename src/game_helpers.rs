@@ -126,27 +126,23 @@ impl GameTimer {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Enum, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum GameStatus {
     Ongoing,
-    Won,
-    Lost,
+    Finished(FinishedGameStatus),
+}
+
+impl From<FinishedGameStatus> for GameStatus {
+    fn from(status: FinishedGameStatus) -> Self {
+        GameStatus::Finished(status)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Enum, Eq, Hash, PartialEq, Serialize)]
 pub enum FinishedGameStatus {
     Won,
     Lost,
-}
-
-impl From<GameStatus> for Option<FinishedGameStatus> {
-    fn from(status: GameStatus) -> Self {
-        match status {
-            GameStatus::Ongoing => None,
-            GameStatus::Won => Some(FinishedGameStatus::Won),
-            GameStatus::Lost => Some(FinishedGameStatus::Lost),
-        }
-    }
+    Expired,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -170,6 +166,13 @@ impl Game {
             interaction_id,
             localization,
             status: GameStatus::Ongoing,
+        }
+    }
+
+    pub fn duration_secs(&self) -> u64 {
+        match self.start_time.elapsed() {
+            Ok(dur) => dur.as_secs(),
+            Err(_) => 0,
         }
     }
 }

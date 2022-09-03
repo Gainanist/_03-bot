@@ -20,11 +20,12 @@ use crate::{
     },
     dice::{choose_mut, Dice},
     events::*,
-    game_helpers::{EventDelay, Game, GameStatus, GameTimer},
+    game_helpers::{EventDelay, Game, GameStatus, GameTimer, FinishedGameStatus},
     localization::RenderText,
 };
 
 const GAME_COOLDOWN_SECONDS: u64 = 10 * 60;
+const MAX_GAME_DURATION_SECS: u64 = 15 * 60;
 
 pub fn listen(
     input_receiver: Mutex<Receiver<InputEvent>>,
@@ -64,13 +65,13 @@ pub fn listen(
                 InputEvent::GameStart(ev) => {
                     let oneshot_type = match games.get(&ev.guild_id) {
                         Some(game) => {
-                            let elapsed_since_game_start = elapsed_since(&game.start_time);
-                            if elapsed_since_game_start < GAME_COOLDOWN_SECONDS {
+                            let game_duration = game.duration_secs();
+                            if game_duration < GAME_COOLDOWN_SECONDS {
                                 if game.status == GameStatus::Ongoing {
                                     Some(OneshotType::OtherGameInProgress)
                                 } else {
                                     Some(OneshotType::Cooldown(Duration::from_secs(
-                                        GAME_COOLDOWN_SECONDS - elapsed_since_game_start,
+                                        GAME_COOLDOWN_SECONDS - game_duration,
                                     )))
                                 }
                             } else {
@@ -138,13 +139,6 @@ pub fn listen(
                 }
             }
         }
-    }
-}
-
-fn elapsed_since(system_time: &SystemTime) -> u64 {
-    match system_time.elapsed() {
-        Ok(dur) => dur.as_secs(),
-        Err(_) => 0,
     }
 }
 
@@ -407,11 +401,11 @@ pub fn update_game_status(
         if active_enemies.iter().all(|(entity, enemy_game_id)| {
             *enemy_game_id != game.id || deactivated.contains(&entity)
         }) {
-            game.status = GameStatus::Won;
+            game.status = FinishedGameStatus::Won.into();
         } else if active_players.iter().all(|(entity, player_game_id)| {
             *player_game_id != game.id || deactivated.contains(&entity)
         }) {
-            game.status = GameStatus::Lost;
+            game.status = FinishedGameStatus::Lost.into();
         }
     }
 }
@@ -507,7 +501,7 @@ pub fn render(
         }
         for GameDrawEvent { guild_id } in ev_game_draw.iter() {
             if let Some(game) = games.get(guild_id) {
-                let game_render_ev = if let Some(finished_status) = game.status.into() {
+                let game_render_ev = if let GameStatus::Finished(finished_status) = game.status {
                     GameRenderEvent {
                         guild_id: *guild_id,
                         interaction_id: game.interaction_id,
@@ -575,9 +569,17 @@ pub fn ready_players(
 
 pub fn cleanup(
     mut commands: Commands,
+    mut games: ResMut<HashMap<Id<GuildMarker>, Game>>,
     mut ev_deallocate_game_resources: EventReader<DeallocateGameResourcesEvent>,
+    mut ev_delayed: EventWriter<DelayedEvent>,
     entities: Query<(Entity, &GameId)>,
 ) {
+    for (guild_id, game) in games.iter_mut() {
+        if game.status == GameStatus::Ongoing && game.duration_secs() >= MAX_GAME_DURATION_SECS {
+            game.status = FinishedGameStatus::Expired.into();
+            ev_delayed.send(DelayedEvent::GameDraw(GameDrawEvent::new(*guild_id)));
+        }
+    }
     for ev in ev_deallocate_game_resources.iter() {
         for (entity, game_id) in entities.iter() {
             if *game_id == ev.game_id {

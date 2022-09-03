@@ -1,6 +1,7 @@
 use std::{error::Error, fmt::Display};
 
 use derive_new::new;
+use rand::{thread_rng, Rng, seq::SliceRandom};
 use twilight_model::{
     application::component::{button::ButtonStyle, ActionRow, Button, Component},
     channel::{embed::Embed, ReactionType},
@@ -207,6 +208,7 @@ impl DiscordRenderer {
         let message = match status {
             FinishedGameStatus::Won => &loc.won.0,
             FinishedGameStatus::Lost => &loc.lost.0,
+            FinishedGameStatus::Expired => &loc.expired.choose(&mut rand::thread_rng()).unwrap().0,
         };
         let embed = EmbedBuilder::new().description(message).build();
 

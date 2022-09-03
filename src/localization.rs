@@ -113,6 +113,7 @@ pub struct Localization {
     pub title: LocalizedLine,
     pub lost: LocalizedLine,
     pub won: LocalizedLine,
+    pub expired: Vec<LocalizedLine>,
     pub battle_cooldown: LocalizedLine,
     pub other_battle_ongoing: LocalizedLine,
 }
@@ -186,6 +187,10 @@ impl Localizations {
             title: LocalizedLine("УНИЧ...ТОЖИТЬ.".to_string()),
             lost: LocalizedLine("*Так темно… Я что, умер? Здесь так спокойно.*".to_string()),
             won: LocalizedLine("*Человек торжествует над машиной!*".to_string()),
+            expired: vec![
+                "Ну все, хватит. Я больше не могу на это смотреть. Дайте мне пару минут, и я разберусь с этой штукой.".into(),
+                "Сердечко. Сердечко. Румяная кошачья мордочка. Сердечко".into(),
+            ],
             battle_cooldown: "*_03 ремонтирует себя, будет готов через {DURATION} сек*".into(),
             other_battle_ongoing: "_03 занят: кто-то уже пытается выйти из Ройса!".into()
         };
@@ -250,6 +255,10 @@ impl Localizations {
             title: LocalizedLine("DES...TROY.".to_string()),
             lost: LocalizedLine("*This darkness… Am I… dead? It’s so peaceful.*".to_string()),
             won: LocalizedLine("*Man triumphs over machine!*".to_string()),
+            expired: vec![
+                "That’s it. I can’t watch this anymore. Just give me a moment, and I’ll deal with this thing.".into(),
+                "Heart. Heart. Blushing cat face. Heart.".into(),
+            ],
             battle_cooldown: "*_03 is repairing itself, it will be ready in {DURATION}s*".into(),
             other_battle_ongoing: "_03 is busy: somebody is already trying to leave Royce!".into()
         };

@@ -65,10 +65,10 @@ pub struct DiscordClient {
 
 impl DiscordClient {
     pub async fn new(token: String) -> Result<(Self, Events), Box<dyn Error + Sync + Send>> {
-        let (cluster, events) = Cluster::builder(token.to_owned(), Intents::empty())
-            .shard_scheme(ShardScheme::try_from((0..=4, 10))?)
-            .build()
-            .await?;
+        let (cluster, events) = Cluster::new(
+            token.to_owned(),
+            Intents::empty()
+        ).await?;
         let cluster = Arc::new(cluster);
 
         let http_read = Arc::new(HttpClient::new(token.to_owned()));
