@@ -208,11 +208,11 @@ impl DiscordRenderer {
         let embed = EmbedBuilder::new().description(message).build();
 
         RenderedGame {
-            upper_message: RenderedMessage::Delete,
-            lower_message: RenderedMessagePure {
+            upper_message: RenderedMessagePure {
                 embeds: vec! [ embed ],
                 components: Vec::new(),
             }.into(),
+            lower_message: RenderedMessage::Delete,
         }
     }
 
