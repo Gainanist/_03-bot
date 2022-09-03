@@ -26,7 +26,7 @@ use crate::{
     command_parser::{is_game_starting, BYGONE_PARTS_FROM_EMOJI_NAME},
     controller::{start_game, process_interaction, update_game_message, create_game_message, create_message, update_game_message_pure},
     events::{InputEvent, GameRenderEvent, GameRenderPayload},
-    localization::Localizations, discord_renderer::{DiscordRenderer, RenderedGame, RenderedMessage, DiscordRendererPureResult, DiscordRendererResult}, game_helpers::InteractionIds,
+    localization::Localizations, discord_renderer::{DiscordRenderer, RenderedGame, RenderedMessage}, game_helpers::InteractionIds,
 };
 
 fn merge_with_cached(rendered_game: RenderedGame, cached: &mut RenderedGame) {

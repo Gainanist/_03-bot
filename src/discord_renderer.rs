@@ -92,18 +92,6 @@ impl From<RenderedGamePure> for RenderedGame {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum DiscordRendererPureResult {
-    Game(RenderedGamePure),
-    Oneshot(RenderedMessagePure),
-}
-
-#[derive(Clone, Debug)]
-pub enum DiscordRendererResult {
-    Game(RenderedGame),
-    Oneshot(RenderedMessagePure),
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct DiscordRenderer;
 
