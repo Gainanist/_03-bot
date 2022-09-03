@@ -4,10 +4,7 @@ use bevy::prelude::Component;
 
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
-use twilight_model::id::{
-    marker::{GuildMarker, UserMarker},
-    Id,
-};
+use twilight_model::id::{marker::UserMarker, Id};
 
 use crate::localization::{Localization, RenderText};
 
@@ -217,7 +214,9 @@ pub struct PlayerName(pub String);
 #[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct UserIdComponent(pub Id<UserMarker>);
 
-#[derive(Clone, Copy, Component, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Copy, Component, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
 pub struct GameId(pub u128);
 
 impl GameId {

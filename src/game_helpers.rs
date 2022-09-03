@@ -8,7 +8,7 @@ use twilight_model::id::{
     Id,
 };
 
-use crate::{localization::Localization, components::GameId};
+use crate::{components::GameId, localization::Localization};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Difficulty {

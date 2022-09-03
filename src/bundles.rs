@@ -4,10 +4,7 @@ use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
 use enum_map::{enum_map, EnumMap};
 
-use twilight_model::id::{
-    marker::UserMarker,
-    Id,
-};
+use twilight_model::id::{marker::UserMarker, Id};
 
 use crate::{components::*, game_helpers::Difficulty};
 
@@ -51,11 +48,7 @@ impl Bygone03Bundle {
         }
     }
 
-    pub fn with_difficulty(
-        game_id: GameId,
-        difficulty: Difficulty,
-        rng: &mut GlobalRng,
-    ) -> Self {
+    pub fn with_difficulty(game_id: GameId, difficulty: Difficulty, rng: &mut GlobalRng) -> Self {
         let parts_health_range = match difficulty {
             Difficulty::Easy => 1..=1,
             Difficulty::Medium => 1..=2,

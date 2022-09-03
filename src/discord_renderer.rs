@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::Display};
 
 use derive_new::new;
-use rand::{thread_rng, Rng, seq::SliceRandom};
+use rand::seq::SliceRandom;
 use twilight_model::{
     application::component::{button::ButtonStyle, ActionRow, Button, Component},
     channel::{embed::Embed, ReactionType},

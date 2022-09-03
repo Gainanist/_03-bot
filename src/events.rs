@@ -9,7 +9,7 @@ use twilight_model::id::{
 };
 
 use crate::{
-    components::{Attack, Bygone03Stage, BygonePart, PlayerName, Vitality, GameId},
+    components::{Attack, Bygone03Stage, BygonePart, GameId, PlayerName, Vitality},
     game_helpers::{Difficulty, FinishedGameStatus},
     localization::Localization,
 };
