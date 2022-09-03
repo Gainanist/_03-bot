@@ -23,15 +23,17 @@ use twilight_model::{
 };
 
 use crate::{
-    command_parser::{is_game_starting, BATTLE_COMMAND, DIFFICULTY_COMMAND_OPTION, LANGUAGE_COMMAND_OPTION},
+    command_parser::{
+        is_game_starting, BATTLE_COMMAND, DIFFICULTY_COMMAND_OPTION, LANGUAGE_COMMAND_OPTION,
+    },
     controller::{
         create_game_message, create_message, process_interaction, start_game, update_game_message,
         update_game_message_pure,
     },
     discord_renderer::{DiscordRenderer, RenderedGame, RenderedMessage},
     events::{GameRenderEvent, GameRenderPayload, InputEvent},
-    game_helpers::{InteractionIds, Difficulty},
-    localization::{Localizations, Language},
+    game_helpers::{Difficulty, InteractionIds},
+    localization::{Language, Localizations},
 };
 
 fn merge_with_cached(rendered_game: RenderedGame, cached: &mut RenderedGame) {
