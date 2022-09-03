@@ -9,7 +9,7 @@ use twilight_model::id::{
 };
 
 use crate::{
-    components::{Attack, Bygone03Stage, BygonePart, PlayerName, Vitality},
+    components::{Attack, Bygone03Stage, BygonePart, PlayerName, Vitality, GameId},
     game_helpers::{Difficulty, FinishedGameStatus},
     localization::Localization,
 };
@@ -21,19 +21,21 @@ pub struct DeactivateEvent(pub Entity);
 pub struct BygonePartDeathEvent {
     pub entity: Entity,
     pub part: BygonePart,
+    pub guild_id: Id<GuildMarker>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, new, Ord, PartialEq, PartialOrd)]
 pub struct PlayerAttackEvent {
     pub player: Id<UserMarker>,
     pub player_name: PlayerName,
-    pub guild: Id<GuildMarker>,
+    pub guild_id: Id<GuildMarker>,
     pub target: BygonePart,
 }
 
 #[derive(Clone, Debug, Eq, Hash, new, Ord, PartialEq, PartialOrd)]
 pub struct EnemyAttackEvent {
-    pub guild: Id<GuildMarker>,
+    pub guild_id: Id<GuildMarker>,
+    pub game_id: GameId,
 }
 
 #[derive(Clone, Debug, new)]
@@ -41,7 +43,7 @@ pub struct GameStartEvent {
     pub initial_player: Id<UserMarker>,
     pub initial_player_name: PlayerName,
     pub difficulty: Difficulty,
-    pub guild: Id<GuildMarker>,
+    pub guild_id: Id<GuildMarker>,
     pub interaction: Id<InteractionMarker>,
     pub localization: Localization,
 }
@@ -52,7 +54,7 @@ pub struct GameDrawEvent {
 }
 #[derive(Clone, Copy, Debug, new)]
 pub struct TurnEndEvent {
-    pub guild_id: Id<GuildMarker>,
+    pub game_id: GameId,
 }
 
 #[derive(Clone, Copy, Debug, new)]
@@ -65,7 +67,19 @@ pub struct ProgressBarUpdateEvent {
 pub struct PlayerJoinEvent {
     pub player: Id<UserMarker>,
     pub player_name: PlayerName,
-    pub guild: Id<GuildMarker>,
+    pub game_id: GameId,
+    pub guild_id: Id<GuildMarker>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, new, Ord, PartialEq, PartialOrd)]
+pub struct BygoneSpawnEvent {
+    pub difficulty: Difficulty,
+    pub game_id: GameId,
+}
+
+#[derive(Clone, Debug, Eq, Hash, new, Ord, PartialEq, PartialOrd)]
+pub struct DeallocateGameResourcesEvent {
+    pub game_id: GameId,
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -80,8 +94,10 @@ impl Plugin for EventsPlugin {
             .add_event::<EnemyAttackEvent>()
             .add_event::<GameDrawEvent>()
             .add_event::<GameStartEvent>()
-            .add_event::<PlayerAttackEvent>()
+            .add_event::<(GameId, PlayerAttackEvent)>()
             .add_event::<PlayerJoinEvent>()
+            .add_event::<BygoneSpawnEvent>()
+            .add_event::<DeallocateGameResourcesEvent>()
             .add_event::<TurnEndEvent>()
             .add_event::<ProgressBarUpdateEvent>();
     }
@@ -106,7 +122,7 @@ pub enum InputEvent {
 #[derive(Clone, Debug)]
 pub enum DelayedEvent {
     GameDraw(GameDrawEvent),
-    PlayerAttack(PlayerAttackEvent),
+    PlayerAttack((GameId, PlayerAttackEvent)),
 }
 
 #[derive(Clone, Debug)]

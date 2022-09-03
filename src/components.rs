@@ -1,6 +1,9 @@
+use std::time::SystemTime;
+
 use bevy::prelude::Component;
 
 use enum_map::Enum;
+use serde::{Deserialize, Serialize};
 use twilight_model::id::{
     marker::{GuildMarker, UserMarker},
     Id,
@@ -212,7 +215,17 @@ pub struct Ready;
 pub struct PlayerName(pub String);
 
 #[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct GuildIdComponent(pub Id<GuildMarker>);
-
-#[derive(Clone, Copy, Component, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct UserIdComponent(pub Id<UserMarker>);
+
+#[derive(Clone, Copy, Component, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct GameId(pub u128);
+
+impl GameId {
+    pub fn from_current_time(salt: u128) -> Self {
+        let timestamp = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(dur) => dur.as_nanos(),
+            Err(err) => err.duration().as_nanos(),
+        };
+        Self(timestamp + salt)
+    }
+}

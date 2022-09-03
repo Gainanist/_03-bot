@@ -8,7 +8,7 @@ use twilight_model::id::{
     Id,
 };
 
-use crate::localization::Localization;
+use crate::{localization::Localization, components::GameId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Difficulty {
@@ -149,23 +149,10 @@ impl From<GameStatus> for Option<FinishedGameStatus> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct GameId(pub u128);
-
-impl GameId {
-    pub fn from_current_time(salt: u128) -> Self {
-        let timestamp = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(dur) => dur.as_nanos(),
-            Err(err) => err.duration().as_nanos(),
-        };
-        Self(timestamp + salt)
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Game {
     pub start_time: SystemTime,
-    pub game_id: GameId,
+    pub id: GameId,
     pub interaction_id: Id<InteractionMarker>,
     pub localization: Localization,
     pub status: GameStatus,
@@ -179,7 +166,7 @@ impl Game {
     ) -> Self {
         Self {
             start_time: SystemTime::now(),
-            game_id,
+            id: game_id,
             interaction_id,
             localization,
             status: GameStatus::Ongoing,

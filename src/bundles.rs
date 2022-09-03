@@ -5,7 +5,7 @@ use bevy_turborand::GlobalRng;
 use enum_map::{enum_map, EnumMap};
 
 use twilight_model::id::{
-    marker::{GuildMarker, UserMarker},
+    marker::UserMarker,
     Id,
 };
 
@@ -16,7 +16,7 @@ pub struct BygoneParts(pub EnumMap<BygonePart, Vitality>);
 
 #[derive(Bundle, Clone, Debug)]
 pub struct Bygone03Bundle {
-    guild: GuildIdComponent,
+    game_id: GameId,
     parts: BygoneParts,
     attack: Attack,
     stage: Bygone03Stage,
@@ -28,7 +28,7 @@ impl Bygone03Bundle {
     pub fn new(
         parts_health_range: impl RangeBounds<usize> + Clone,
         attack_range: impl RangeBounds<usize> + Clone,
-        guild: Id<GuildMarker>,
+        game_id: GameId,
         rng: &mut GlobalRng,
     ) -> Self {
         let wings_hp = rng.usize(parts_health_range.clone());
@@ -42,7 +42,7 @@ impl Bygone03Bundle {
         let attack = Attack::new(rng.usize(attack_range), 100);
 
         Self {
-            guild: GuildIdComponent(guild),
+            game_id,
             parts,
             attack,
             stage: Bygone03Stage::Armored,
@@ -52,7 +52,7 @@ impl Bygone03Bundle {
     }
 
     pub fn with_difficulty(
-        guild: Id<GuildMarker>,
+        game_id: GameId,
         difficulty: Difficulty,
         rng: &mut GlobalRng,
     ) -> Self {
@@ -68,7 +68,7 @@ impl Bygone03Bundle {
             Difficulty::Hard => 1..=3,
             Difficulty::RealBullets => 6..=6,
         };
-        Self::new(parts_health_range, attack_range, guild, rng)
+        Self::new(parts_health_range, attack_range, game_id, rng)
     }
 }
 
@@ -76,7 +76,7 @@ impl Bygone03Bundle {
 pub struct PlayerBundle {
     user_id: UserIdComponent,
     name: PlayerName,
-    guild: GuildIdComponent,
+    game_id: GameId,
     vitality: Vitality,
     attack: Attack,
     _player: Player,
@@ -85,11 +85,11 @@ pub struct PlayerBundle {
 }
 
 impl PlayerBundle {
-    pub fn new(user_id: Id<UserMarker>, name: PlayerName, guild: Id<GuildMarker>) -> Self {
+    pub fn new(user_id: Id<UserMarker>, name: PlayerName, game_id: GameId) -> Self {
         Self {
             user_id: UserIdComponent(user_id),
             name,
-            guild: GuildIdComponent(guild),
+            game_id,
             vitality: Vitality::new(6, 100),
             attack: Attack::new(1, 0),
             _player: Player,

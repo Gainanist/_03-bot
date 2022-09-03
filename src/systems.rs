@@ -15,12 +15,12 @@ use twilight_model::id::{marker::GuildMarker, Id};
 use crate::{
     bundles::{Bygone03Bundle, BygoneParts, PlayerBundle},
     components::{
-        Active, Attack, Bygone03Stage, BygonePart, Enemy, GuildIdComponent, Player, PlayerName,
+        Active, Attack, Bygone03Stage, BygonePart, Enemy, GameId, Player, PlayerName,
         Ready, UserIdComponent, Vitality,
     },
     dice::{choose_mut, Dice},
     events::*,
-    game_helpers::{EventDelay, Game, GameId, GameStatus, GameTimer},
+    game_helpers::{EventDelay, Game, GameStatus, GameTimer},
     localization::RenderText,
 };
 
@@ -33,9 +33,11 @@ pub fn listen(
     ResMut<HashMap<Id<GuildMarker>, Game>>,
     ResMut<HashMap<Id<GuildMarker>, Vec<String>>>,
     EventWriter<GameStartEvent>,
-    EventWriter<PlayerAttackEvent>,
+    EventWriter<(GameId, PlayerAttackEvent)>,
     EventWriter<DelayedEvent>,
     EventWriter<PlayerJoinEvent>,
+    EventWriter<BygoneSpawnEvent>,
+    EventWriter<DeallocateGameResourcesEvent>,
     Query<(&UserIdComponent, Option<&Active>), (With<Player>,)>,
 ) {
     move |mut games,
@@ -44,6 +46,8 @@ pub fn listen(
           mut ev_player_attack,
           mut ev_delayed,
           mut ev_player_join,
+          mut ev_bygone_spawn,
+          mut ev_deallocate_game_resources,
           players| {
         let mut events = Vec::new();
         if let Ok(ref mut receiver_lock) = input_receiver.try_lock() {
@@ -58,7 +62,7 @@ pub fn listen(
         for (i, event) in events.into_iter().enumerate() {
             match event {
                 InputEvent::GameStart(ev) => {
-                    let oneshot_type = match games.get(&ev.guild) {
+                    let oneshot_type = match games.get(&ev.guild_id) {
                         Some(game) => {
                             let elapsed_since_game_start = elapsed_since(&game.start_time);
                             if elapsed_since_game_start < GAME_COOLDOWN_SECONDS {
@@ -78,46 +82,56 @@ pub fn listen(
                     if let Some(oneshot_type) = oneshot_type {
                         if let Ok(game_render_sender_lock) = game_render_sender.lock() {
                             game_render_sender_lock.send(GameRenderEvent::new(
-                                ev.guild,
+                                ev.guild_id,
                                 ev.interaction,
                                 ev.localization.clone(),
                                 GameRenderPayload::OneshotMessage(oneshot_type),
                             ));
                         }
                     } else {
-                        games.insert(
-                            ev.guild,
+                        let new_game_id = GameId::from_current_time(i as u128);
+                        let old_game = games.insert(
+                            ev.guild_id,
                             Game::new(
-                                GameId::from_current_time(i as u128),
+                                new_game_id,
                                 ev.interaction,
                                 ev.localization.clone(),
                             ),
                         );
-                        battle_log.remove(&ev.guild);
+                        if let Some(old_game) = old_game {
+                            ev_deallocate_game_resources.send(DeallocateGameResourcesEvent::new(old_game.id));
+                        }
+                        battle_log.remove(&ev.guild_id);
                         ev_game_start.send(ev.clone());
                         ev_player_join.send(PlayerJoinEvent::new(
                             ev.initial_player,
                             ev.initial_player_name,
-                            ev.guild,
+                            new_game_id,
+                            ev.guild_id,
                         ));
-                        ev_delayed.send(DelayedEvent::GameDraw(GameDrawEvent::new(ev.guild)));
+                        ev_bygone_spawn.send(BygoneSpawnEvent::new(
+                            ev.difficulty,
+                            new_game_id,
+                        ));
+                        ev_delayed.send(DelayedEvent::GameDraw(GameDrawEvent::new(ev.guild_id)));
                     }
                 }
                 InputEvent::PlayerAttack(ev) => {
-                    if games.contains_key(&ev.guild) {
+                    if let Some(game) = games.get(&ev.guild_id) {
                         match players.get(&UserIdComponent(ev.player)) {
                             Some(maybe_active) => {
                                 if let Some(_active) = maybe_active {
-                                    ev_player_attack.send(ev);
+                                    ev_player_attack.send((game.id, ev));
                                 }
                             }
                             None => {
                                 ev_player_join.send(PlayerJoinEvent::new(
                                     ev.player.clone(),
                                     ev.player_name.clone(),
-                                    ev.guild.clone(),
+                                    game.id,
+                                    ev.guild_id,
                                 ));
-                                ev_delayed.send(DelayedEvent::PlayerAttack(ev));
+                                ev_delayed.send(DelayedEvent::PlayerAttack((game.id, ev)));
                             }
                         }
                     }
@@ -139,7 +153,7 @@ pub fn delay_events(
     mut buffer: Local<VecDeque<(Instant, DelayedEvent)>>,
     mut ev_delayed: EventReader<DelayedEvent>,
     mut ev_game_draw: EventWriter<GameDrawEvent>,
-    mut ev_player_attack: EventWriter<PlayerAttackEvent>,
+    mut ev_player_attack: EventWriter<(GameId, PlayerAttackEvent)>,
 ) {
     let ready_count = buffer
         .iter()
@@ -158,19 +172,19 @@ pub fn delay_events(
 }
 
 pub fn turn_timer(
-    mut timers: Local<HashMap<Id<GuildMarker>, GameTimer>>,
-    mut ev_player_attack: EventReader<PlayerAttackEvent>,
+    mut timers: Local<HashMap<(Id<GuildMarker>, GameId), GameTimer>>,
+    mut ev_player_attack: EventReader<(GameId, PlayerAttackEvent)>,
     mut ev_enemy_attack: EventWriter<EnemyAttackEvent>,
     mut ev_game_draw: EventWriter<GameDrawEvent>,
     mut ev_turn_end: EventWriter<TurnEndEvent>,
     mut ev_progress_bar_update: EventWriter<ProgressBarUpdateEvent>,
 ) {
-    for (guild_id, timer) in timers.iter_mut() {
+    for ((guild_id, game_id), timer) in timers.iter_mut() {
         if timer.enemy_attack() {
-            ev_enemy_attack.send(EnemyAttackEvent::new(*guild_id));
+            ev_enemy_attack.send(EnemyAttackEvent::new(*guild_id, *game_id));
         }
         if timer.turn_end() {
-            ev_turn_end.send(TurnEndEvent::new(*guild_id));
+            ev_turn_end.send(TurnEndEvent::new(*game_id));
             ev_game_draw.send(GameDrawEvent::new(*guild_id));
         }
         if let Some(progress) = timer.progress_bar_update() {
@@ -180,19 +194,19 @@ pub fn turn_timer(
 
     timers.retain(|_, timer| !timer.depleted());
 
-    for ev in ev_player_attack.iter() {
-        timers.entry(ev.guild).or_insert(GameTimer::new());
+    for (game_id, ev) in ev_player_attack.iter() {
+        timers.entry((ev.guild_id, *game_id)).or_insert(GameTimer::new());
     }
 }
 
 pub fn spawn_bygones(
     mut commands: Commands,
     mut global_rng: ResMut<GlobalRng>,
-    mut ev_game_start: EventReader<GameStartEvent>,
+    mut ev_game_start: EventReader<BygoneSpawnEvent>,
 ) {
     for ev in ev_game_start.iter() {
         commands.spawn_bundle(Bygone03Bundle::with_difficulty(
-            ev.guild,
+            ev.game_id,
             ev.difficulty,
             &mut global_rng,
         ));
@@ -204,7 +218,7 @@ pub fn spawn_players(mut commands: Commands, mut ev_player_join: EventReader<Pla
         commands.spawn_bundle(PlayerBundle::new(
             ev.player,
             ev.player_name.clone(),
-            ev.guild,
+            ev.game_id,
         ));
     }
 }
@@ -212,7 +226,7 @@ pub fn spawn_players(mut commands: Commands, mut ev_player_join: EventReader<Pla
 pub fn damage_bygone(
     mut commands: Commands,
     mut rng: ResMut<GlobalRng>,
-    mut ev_player_attack: EventReader<PlayerAttackEvent>,
+    mut ev_player_attack: EventReader<(GameId, PlayerAttackEvent)>,
     mut ev_part_death: EventWriter<BygonePartDeathEvent>,
     mut ev_battle_log: EventWriter<(Id<GuildMarker>, BattleLogEvent)>,
     mut actors: ParamSet<(
@@ -221,31 +235,31 @@ pub fn damage_bygone(
                 Entity,
                 &UserIdComponent,
                 &PlayerName,
-                &GuildIdComponent,
+                &GameId,
                 &Attack,
             ),
             (With<Player>, With<Active>, With<Ready>),
         >,
-        Query<(Entity, &GuildIdComponent, &mut BygoneParts), (With<Enemy>, With<Active>)>,
+        Query<(Entity, &GameId, &mut BygoneParts), (With<Enemy>, With<Active>)>,
     )>,
 ) {
     let target_parts: HashMap<_, _> = ev_player_attack
         .iter()
-        .map(|ev| ((ev.player, ev.guild), ev.target))
+        .map(|(game_id, ev)| ((ev.player, *game_id), (ev.guild_id, ev.target)))
         .collect();
 
     let attacks: HashMap<_, _> = actors
         .p0()
         .iter()
-        .filter(|(_, user_id, _, guild_id, _)| target_parts.contains_key(&(user_id.0, guild_id.0)))
-        .map(|(entity, user_id, user_name, guild_id, attack)| {
-            (*guild_id, (entity, *user_id, user_name.clone(), *attack))
+        .filter(|(_, user_id, _, game_id, _)| target_parts.contains_key(&(user_id.0, **game_id)))
+        .map(|(entity, user_id, user_name, game_id, attack)| {
+            (*game_id, (entity, *user_id, user_name.clone(), *attack))
         })
         .collect();
 
-    for (bygone_entity, enemy_guild, mut body_parts) in actors.p1().iter_mut() {
-        if let Some((user_entity, user_id, user_name, attack)) = attacks.get(enemy_guild) {
-            if let Some(part) = target_parts.get(&(user_id.0, enemy_guild.0)) {
+    for (bygone_entity, enemy_game_id, mut body_parts) in actors.p1().iter_mut() {
+        if let Some((user_entity, user_id, user_name, attack)) = attacks.get(enemy_game_id) {
+            if let Some((guild_id, part)) = target_parts.get(&(user_id.0, *enemy_game_id)) {
                 if !body_parts.0[*part].health().alive() {
                     continue;
                 }
@@ -258,15 +272,15 @@ pub fn damage_bygone(
                 );
                 if attack.attack(&mut body_parts.0[*part], dice_roll) {
                     ev_battle_log.send((
-                        enemy_guild.0,
+                        *guild_id,
                         BattleLogEvent::PlayerHit(user_name.clone(), *part),
                     ));
                     if !body_parts.0[*part].health().alive() {
-                        ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part));
+                        ev_part_death.send(BygonePartDeathEvent::new(bygone_entity, *part, *guild_id));
                     }
                 } else {
                     ev_battle_log
-                        .send((enemy_guild.0, BattleLogEvent::PlayerMiss(user_name.clone())));
+                        .send((*guild_id, BattleLogEvent::PlayerMiss(user_name.clone())));
                 }
                 commands.entity(*user_entity).remove::<Ready>();
             }
@@ -281,7 +295,6 @@ pub fn process_bygone_part_death(
     mut bygones: Query<
         (
             Entity,
-            &GuildIdComponent,
             &mut BygoneParts,
             &mut Attack,
             &mut Bygone03Stage,
@@ -289,8 +302,8 @@ pub fn process_bygone_part_death(
         (With<Enemy>, With<Active>),
     >,
 ) {
-    for BygonePartDeathEvent { entity, part } in ev_part_death.iter() {
-        for (bygone_entity, guild, ref mut parts, ref mut attack, ref mut stage) in
+    for BygonePartDeathEvent { entity, part, guild_id } in ev_part_death.iter() {
+        for (bygone_entity, ref mut parts, ref mut attack, ref mut stage) in
             bygones.iter_mut()
         {
             if bygone_entity != *entity {
@@ -301,7 +314,7 @@ pub fn process_bygone_part_death(
                     **stage = stage.next();
                     if stage.terminal() {
                         ev_deactivate.send(DeactivateEvent(bygone_entity));
-                        ev_battle_log.send((guild.0, BattleLogEvent::BygoneDead));
+                        ev_battle_log.send((*guild_id, BattleLogEvent::BygoneDead));
                     } else {
                         let core_max_health = parts.0[BygonePart::Core].health().max();
                         let core_dodge = parts.0[BygonePart::Core].dodge();
@@ -331,31 +344,31 @@ pub fn damage_players(
     mut ev_battle_log: EventWriter<(Id<GuildMarker>, BattleLogEvent)>,
     mut ev_deactivate: EventWriter<DeactivateEvent>,
     mut players: Query<
-        (Entity, &GuildIdComponent, &PlayerName, &mut Vitality),
+        (Entity, &GameId, &PlayerName, &mut Vitality),
         (With<Player>, With<Active>),
     >,
-    enemies: Query<(&GuildIdComponent, &Attack), (With<Enemy>, With<Active>)>,
+    enemies: Query<(&GameId, &Attack), (With<Enemy>, With<Active>)>,
 ) {
-    for EnemyAttackEvent { guild } in ev_enemy_attack.iter() {
+    for EnemyAttackEvent { guild_id, game_id } in ev_enemy_attack.iter() {
         let mut players: Vec<_> = players
             .iter_mut()
-            .filter(|(_, player_guild_id, _, _)| player_guild_id.0 == *guild)
+            .filter(|(_, player_game_id, _, _)| *player_game_id == game_id)
             .map(|(entity, _, name, vitality)| (entity, name, vitality))
             .collect();
         let enemies = enemies
             .iter()
-            .filter(|(enemy_guild_id, _)| enemy_guild_id.0 == *guild);
+            .filter(|(enemy_game_id, _)| *enemy_game_id == game_id);
 
-        for (guild_id, attack) in enemies {
+        for (game_id, attack) in enemies {
             if let Some((entity, name, target)) = choose_mut(&mut rng, &mut players) {
                 if attack.attack(target.deref_mut(), rng.d100()) {
-                    ev_battle_log.send((guild_id.0, BattleLogEvent::BygoneHit(name.clone())));
+                    ev_battle_log.send((*guild_id, BattleLogEvent::BygoneHit(name.clone())));
                     if !target.health().alive() {
                         ev_deactivate.send(DeactivateEvent(*entity));
-                        ev_battle_log.send((guild_id.0, BattleLogEvent::PlayerDead(name.clone())));
+                        ev_battle_log.send((*guild_id, BattleLogEvent::PlayerDead(name.clone())));
                     }
                 } else {
-                    ev_battle_log.send((guild_id.0, BattleLogEvent::BygoneMiss));
+                    ev_battle_log.send((*guild_id, BattleLogEvent::BygoneMiss));
                 }
             }
         }
@@ -371,9 +384,9 @@ pub fn deactivate(mut commands: Commands, mut ev_deactivate: EventReader<Deactiv
 pub fn update_game_status(
     mut games: ResMut<HashMap<Id<GuildMarker>, Game>>,
     mut ev_deactivate: EventReader<DeactivateEvent>,
-    active_players: Query<(Entity, &GuildIdComponent), (With<Player>, With<Active>)>,
-    active_enemies: Query<(Entity, &GuildIdComponent), (With<Enemy>, With<Active>)>,
-    entities: Query<(Entity, &GuildIdComponent), (Or<(With<Enemy>, With<Player>)>,)>,
+    active_players: Query<(Entity, &GameId), (With<Player>, With<Active>)>,
+    active_enemies: Query<(Entity, &GameId), (With<Enemy>, With<Active>)>,
+    entities: Query<(Entity, &GameId), (Or<(With<Enemy>, With<Player>)>,)>,
 ) {
     let deactivated: HashSet<_> = ev_deactivate
         .iter()
@@ -387,16 +400,16 @@ pub fn update_game_status(
     {
         let initialized = entities
             .iter()
-            .any(|(_, enemy_guild_id)| enemy_guild_id.0 == *guild_id);
+            .any(|(_, enemy_game_id)| *enemy_game_id == game.id);
         if !initialized {
             continue;
         }
-        if active_enemies.iter().all(|(entity, enemy_guild_id)| {
-            enemy_guild_id.0 != *guild_id || deactivated.contains(&entity)
+        if active_enemies.iter().all(|(entity, enemy_game_id)| {
+            *enemy_game_id != game.id || deactivated.contains(&entity)
         }) {
             game.status = GameStatus::Won;
-        } else if active_players.iter().all(|(entity, player_guild_id)| {
-            player_guild_id.0 != *guild_id || deactivated.contains(&entity)
+        } else if active_players.iter().all(|(entity, player_game_id)| {
+            *player_game_id != game.id || deactivated.contains(&entity)
         }) {
             game.status = GameStatus::Lost;
         }
@@ -448,14 +461,14 @@ pub fn log_battle(
         }
     }
     for ev in ev_player_join.iter() {
-        if let Some(game) = games.get(&ev.guild) {
+        if let Some(game) = games.get(&ev.guild_id) {
             let loc = &game.localization;
             let log_line = rng
                 .sample(&loc.player_join)
                 .unwrap()
                 .insert_player_name(&ev.player_name);
             battle_log
-                .entry(ev.guild)
+                .entry(ev.guild_id)
                 .or_insert(Vec::new())
                 .push(log_line.0);
         }
@@ -470,8 +483,8 @@ pub fn render(
     ResMut<GlobalRng>,
     EventReader<GameDrawEvent>,
     EventReader<ProgressBarUpdateEvent>,
-    Query<(&PlayerName, &GuildIdComponent, &Vitality), (With<Player>,)>,
-    Query<(&GuildIdComponent, &BygoneParts, &Attack, &Bygone03Stage), (With<Enemy>,)>,
+    Query<(&PlayerName, &GameId, &Vitality), (With<Player>,)>,
+    Query<(&GameId, &BygoneParts, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
     move |games,
           mut battle_log,
@@ -505,8 +518,8 @@ pub fn render(
                     let mut bygone_attack = Attack::default();
                     let mut bygone_parts = EnumMap::<BygonePart, Vitality>::default();
                     let mut bygone_stage = Bygone03Stage::Armored;
-                    for (enemy_guild_id, BygoneParts(parts), attack, stage) in enemies.iter() {
-                        if enemy_guild_id.0 != *guild_id {
+                    for (enemy_game_id, BygoneParts(parts), attack, stage) in enemies.iter() {
+                        if *enemy_game_id != game.id {
                             continue;
                         }
                         bygone_attack = *attack;
@@ -517,8 +530,8 @@ pub fn render(
                     let battle_log_lines = battle_log.remove(guild_id).unwrap_or_default();
 
                     let mut players = Vec::new();
-                    for (name, player_guild_id, vitality) in all_players.iter() {
-                        if player_guild_id.0 != *guild_id {
+                    for (name, player_game_id, vitality) in all_players.iter() {
+                        if *player_game_id != game.id {
                             continue;
                         }
                         players.push((name.clone(), *vitality));
@@ -549,11 +562,11 @@ pub fn render(
 pub fn ready_players(
     mut commands: Commands,
     mut ev_turn_end: EventReader<TurnEndEvent>,
-    players: Query<(Entity, &GuildIdComponent), (With<Player>, With<Active>, Without<Ready>)>,
+    players: Query<(Entity, &GameId), (With<Player>, With<Active>, Without<Ready>)>,
 ) {
     for ev in ev_turn_end.iter() {
-        for (entity, guild_id) in players.iter() {
-            if guild_id.0 == ev.guild_id {
+        for (entity, game_id) in players.iter() {
+            if *game_id == ev.game_id {
                 commands.entity(entity).insert(Ready);
             }
         }
@@ -562,12 +575,12 @@ pub fn ready_players(
 
 pub fn cleanup(
     mut commands: Commands,
-    games: Res<HashMap<Id<GuildMarker>, Game>>,
-    entities: Query<(Entity, &GuildIdComponent)>,
+    mut ev_deallocate_game_resources: EventReader<DeallocateGameResourcesEvent>,
+    entities: Query<(Entity, &GameId)>,
 ) {
-    for (entity, guild_id) in entities.iter() {
-        if let Some(game) = games.get(&guild_id.0) {
-            if game.status != GameStatus::Ongoing {
+    for ev in ev_deallocate_game_resources.iter() {
+        for (entity, game_id) in entities.iter() {
+            if *game_id == ev.game_id {
                 commands.entity(entity).despawn();
             }
         }
