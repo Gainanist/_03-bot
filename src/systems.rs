@@ -25,7 +25,7 @@ use crate::{
 };
 
 const GAME_COOLDOWN_SECONDS: u64 = 10 * 60;
-const MAX_GAME_DURATION_SECS: u64 = 15 * 60;
+const MAX_GAME_DURATION_SECS: u64 = 15 * 60 - 10;
 
 pub fn listen(
     input_receiver: Mutex<Receiver<InputEvent>>,
