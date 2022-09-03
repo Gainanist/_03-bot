@@ -13,7 +13,7 @@ use derive_new::new;
 use futures::stream::StreamExt;
 
 use twilight_gateway::{
-    cluster::{ClusterStartError, Events},
+    cluster::{ClusterStartError, Events, ShardScheme},
     Cluster, Event, Intents,
 };
 use twilight_http::Client as HttpClient;
@@ -54,31 +54,27 @@ pub struct DiscordClient {
     cluster: Arc<Cluster>,
     http_write: Arc<HttpClient>,
     http_read: Arc<HttpClient>,
-    game_channel_ids: Arc<Mutex<HashMap<Id<GuildMarker>, Id<ChannelMarker>>>>,
 }
 
 impl DiscordClient {
     pub async fn new(token: String) -> Result<(Self, Events), Box<dyn Error + Sync + Send>> {
-        let (cluster, events) = Cluster::new(
+        let (cluster, events) = Cluster::builder(
             token.to_owned(),
             Intents::empty(),
         )
+        .shard_scheme(ShardScheme::try_from((0..=4, 10))?)
+        .build()
         .await?;
         let cluster = Arc::new(cluster);
 
         let http_read = Arc::new(HttpClient::new(token.to_owned()));
         let http_write = Arc::new(HttpClient::new(token));
 
-        let game_channel_ids = Arc::new(Mutex::new(
-            HashMap::<Id<GuildMarker>, Id<ChannelMarker>>::new(),
-        ));
-
         Ok((
             Self {
                 cluster,
                 http_write,
                 http_read,
-                game_channel_ids,
             },
             events,
         ))
