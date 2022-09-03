@@ -14,5 +14,4 @@ pub struct Cli {
     /// Update bot commands
     #[clap(short, long, action)]
     pub update_commands: bool,
-
 }

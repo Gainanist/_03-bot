@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
-use crate::components::{PlayerName};
+use crate::components::PlayerName;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Language {
@@ -27,7 +27,10 @@ impl LocalizedLine {
     }
 
     pub fn insert_duration(&self, duration: &Duration) -> Self {
-        LocalizedLine(self.0.replace("{DURATION}", &duration.as_secs().to_string()))
+        LocalizedLine(
+            self.0
+                .replace("{DURATION}", &duration.as_secs().to_string()),
+        )
     }
 }
 

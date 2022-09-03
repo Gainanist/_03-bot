@@ -1,14 +1,11 @@
-use std::{
-    time::{Duration, Instant, SystemTime},
-};
+use std::time::{Duration, Instant, SystemTime};
 
-use arrayvec::ArrayVec;
 use derive_new::new;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
-use twilight_model::{
-    channel::embed::Embed,
-    id::{marker::{GuildMarker, InteractionMarker, ApplicationMarker}, Id}, application::component::{Component, ActionRow},
+use twilight_model::id::{
+    marker::{ApplicationMarker, InteractionMarker},
+    Id,
 };
 
 use crate::localization::Localization;
@@ -49,7 +46,8 @@ impl GameTimer {
     const PROGRESS_BAR_TICK_SECS: u64 = 2;
 
     const TURN_DURATION: Duration = Duration::from_secs(Self::TURN_DURATION_SECS);
-    const ENEMY_ATTACK_DELAY: Duration = Duration::from_millis(Self::TURN_DURATION_SECS*1000 - 500);
+    const ENEMY_ATTACK_DELAY: Duration =
+        Duration::from_millis(Self::TURN_DURATION_SECS * 1000 - 500);
 
     pub fn new() -> Self {
         Self {
@@ -65,7 +63,10 @@ impl GameTimer {
     }
 
     pub fn enemy_attack(&mut self) -> bool {
-        if self.timer_finished() || self.enemy_attacked || self.start.elapsed() < Self::ENEMY_ATTACK_DELAY {
+        if self.timer_finished()
+            || self.enemy_attacked
+            || self.start.elapsed() < Self::ENEMY_ATTACK_DELAY
+        {
             false
         } else {
             self.enemy_attacked = true;
@@ -87,12 +88,16 @@ impl GameTimer {
             return None;
         }
         let elapsed = self.start.elapsed().as_secs();
-        let next_progress_bar_pos = (
-            (self.progress_bar_ticks + 1) * Self::PROGRESS_BAR_TICK_SECS
-        ).min(Self::TURN_DURATION_SECS);
+        let next_progress_bar_pos = ((self.progress_bar_ticks + 1) * Self::PROGRESS_BAR_TICK_SECS)
+            .min(Self::TURN_DURATION_SECS);
         if elapsed >= next_progress_bar_pos {
-            self.progress_bar_ticks += 1 + (elapsed - next_progress_bar_pos) / Self::PROGRESS_BAR_TICK_SECS;
-            Some((elapsed as f32 / Self::TURN_DURATION_SECS as f32).max(0.0).min(1.0))
+            self.progress_bar_ticks +=
+                1 + (elapsed - next_progress_bar_pos) / Self::PROGRESS_BAR_TICK_SECS;
+            Some(
+                (elapsed as f32 / Self::TURN_DURATION_SECS as f32)
+                    .max(0.0)
+                    .min(1.0),
+            )
         } else {
             None
         }
@@ -149,7 +154,11 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(game_id: GameId, interaction_id: Id<InteractionMarker>, localization: Localization) -> Self {
+    pub fn new(
+        game_id: GameId,
+        interaction_id: Id<InteractionMarker>,
+        localization: Localization,
+    ) -> Self {
         Self {
             start_time: SystemTime::now(),
             game_id,

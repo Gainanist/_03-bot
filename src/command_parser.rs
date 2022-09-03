@@ -1,7 +1,9 @@
 use phf::phf_ordered_map;
-use twilight_model::application::{interaction::application_command::{CommandData, CommandOptionValue}, command::CommandType};
+use twilight_model::application::interaction::application_command::{
+    CommandData, CommandOptionValue,
+};
 
-use crate::{components::BygonePart, localization::Language, game_helpers::Difficulty};
+use crate::{components::BygonePart, game_helpers::Difficulty, localization::Language};
 
 pub fn is_game_starting(command: &CommandData) -> Option<(Language, Difficulty)> {
     if command.name != "battle" {

@@ -5,20 +5,14 @@ mod components;
 mod controller;
 mod dice;
 mod discord_client;
+mod discord_renderer;
 mod events;
 mod game_helpers;
 mod io;
 mod localization;
 mod systems;
-mod discord_renderer;
 
-use std::{
-    collections::HashMap,
-    env,
-    error::Error,
-    sync::Mutex,
-    time::Duration,
-};
+use std::{collections::HashMap, env, error::Error, sync::Mutex, time::Duration};
 
 use bevy_turborand::RngPlugin;
 use clap::Parser;
@@ -37,12 +31,7 @@ use crate::systems::*;
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 
-use twilight_model::{
-    id::{
-        marker::GuildMarker,
-        Id,
-    },
-};
+use twilight_model::id::{marker::GuildMarker, Id};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -88,7 +77,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_plugins(MinimalPlugins)
         .add_plugin(RngPlugin::default())
         .add_plugin(EventsPlugin::default())
-        .add_system(listen(Mutex::new(input_receiver), Mutex::new(output_sender.clone())).before(render_label))
+        .add_system(
+            listen(
+                Mutex::new(input_receiver),
+                Mutex::new(output_sender.clone()),
+            )
+            .before(render_label),
+        )
         .add_system(delay_events.before(render_label))
         .add_system(turn_timer.before(render_label))
         .add_system(spawn_bygones.before(render_label))

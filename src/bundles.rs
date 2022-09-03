@@ -51,7 +51,11 @@ impl Bygone03Bundle {
         }
     }
 
-    pub fn with_difficulty(guild: Id<GuildMarker>, difficulty: Difficulty, rng: &mut GlobalRng) -> Self {
+    pub fn with_difficulty(
+        guild: Id<GuildMarker>,
+        difficulty: Difficulty,
+        rng: &mut GlobalRng,
+    ) -> Self {
         let parts_health_range = match difficulty {
             Difficulty::Easy => 1..=1,
             Difficulty::Medium => 1..=2,

@@ -1,30 +1,27 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     ops::DerefMut,
-    sync::{
-        Mutex,
-    },
-    time::{Instant, SystemTime, Duration}, default,
+    sync::Mutex,
+    time::{Duration, Instant, SystemTime},
 };
 
 use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
-use crossbeam_channel::{Sender, Receiver};
+use crossbeam_channel::{Receiver, Sender};
 use enum_map::EnumMap;
 use rand::Rng;
-use twilight_model::{id::{marker::GuildMarker, Id}, application::component::{ActionRow, Component as MessageComponent, Button as MessageButton, button::ButtonStyle}, channel::ReactionType};
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
+use twilight_model::id::{marker::GuildMarker, Id};
 
 use crate::{
     bundles::{Bygone03Bundle, BygoneParts, PlayerBundle},
     components::{
         Active, Attack, Bygone03Stage, BygonePart, Enemy, GuildIdComponent, Player, PlayerName,
-        Ready, UserIdComponent, Vitality, Health,
+        Ready, UserIdComponent, Vitality,
     },
     dice::{choose_mut, Dice},
     events::*,
     game_helpers::{EventDelay, Game, GameId, GameStatus, GameTimer},
-    localization::{RenderText, Localization}, command_parser::{BYGONE_PARTS_FROM_EMOJI_NAME, AUXILIARY_EMOJIS}, discord_renderer::RenderedGame,
+    localization::RenderText,
 };
 
 const GAME_COOLDOWN_SECONDS: u64 = 10 * 60;
@@ -68,9 +65,9 @@ pub fn listen(
                                 if game.status == GameStatus::Ongoing {
                                     Some(OneshotType::OtherGameInProgress)
                                 } else {
-                                    Some(OneshotType::Cooldown(
-                                        Duration::from_secs(GAME_COOLDOWN_SECONDS - elapsed_since_game_start)
-                                    ))
+                                    Some(OneshotType::Cooldown(Duration::from_secs(
+                                        GAME_COOLDOWN_SECONDS - elapsed_since_game_start,
+                                    )))
                                 }
                             } else {
                                 None
@@ -476,7 +473,13 @@ pub fn render(
     Query<(&PlayerName, &GuildIdComponent, &Vitality), (With<Player>,)>,
     Query<(&GuildIdComponent, &BygoneParts, &Attack, &Bygone03Stage), (With<Enemy>,)>,
 ) {
-    move |games, mut battle_log, mut rng, mut ev_game_draw, mut ev_progress_bar_update, all_players, enemies| {
+    move |games,
+          mut battle_log,
+          _rng,
+          mut ev_game_draw,
+          mut ev_progress_bar_update,
+          all_players,
+          enemies| {
         for ProgressBarUpdateEvent { guild_id, progress } in ev_progress_bar_update.iter() {
             if let Some(game) = games.get(guild_id) {
                 if let Ok(ref mut sender_lock) = sender.lock() {
@@ -509,7 +512,6 @@ pub fn render(
                         bygone_attack = *attack;
                         bygone_parts = *parts;
                         bygone_stage = *stage;
-
                     }
 
                     let battle_log_lines = battle_log.remove(guild_id).unwrap_or_default();
@@ -534,7 +536,6 @@ pub fn render(
                             players,
                         }),
                     }
-
                 };
 
                 if let Ok(sender_lock) = sender.lock() {

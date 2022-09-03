@@ -1,10 +1,19 @@
-use std::{collections::HashMap, fmt::Display, error::Error};
+use std::{error::Error, fmt::Display};
 
 use derive_new::new;
-use twilight_model::{channel::{embed::Embed, ReactionType}, application::component::{Component, ActionRow, button::ButtonStyle, Button}, id::{Id, marker::GuildMarker}};
+use twilight_model::{
+    application::component::{button::ButtonStyle, ActionRow, Button, Component},
+    channel::{embed::Embed, ReactionType},
+    id::{marker::GuildMarker, Id},
+};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
-use crate::{events::{GameRenderEvent, GameRenderPayload, OngoingGamePayload, OneshotType}, game_helpers::FinishedGameStatus, localization::{Localization, RenderText}, components::{BygonePart, Health}};
+use crate::{
+    components::{BygonePart, Health},
+    events::{OneshotType, OngoingGamePayload},
+    game_helpers::FinishedGameStatus,
+    localization::{Localization, RenderText},
+};
 
 const PROGRESS_BAR_SIZE: usize = 4;
 const PROGRESS_BAR_SCALE: f32 = PROGRESS_BAR_SIZE as f32 + 1.0;
@@ -23,7 +32,9 @@ fn make_controls_button(emoji: &str, health: &Health) -> Component {
     Component::Button(Button {
         custom_id: Some(emoji.to_owned()),
         disabled: !health.alive(),
-        emoji: Some(ReactionType::Unicode { name: emoji.to_owned() }),
+        emoji: Some(ReactionType::Unicode {
+            name: emoji.to_owned(),
+        }),
         label: None,
         style: get_button_style(health),
         url: None,
@@ -53,7 +64,7 @@ impl Display for GameRenderError {
 impl Error for GameRenderError {}
 
 #[derive(Clone, Debug)]
-pub struct  RenderedMessagePure {
+pub struct RenderedMessagePure {
     pub embeds: Vec<Embed>,
     pub components: Vec<Component>,
 }
@@ -96,7 +107,10 @@ impl From<RenderedGamePure> for RenderedGame {
 pub struct DiscordRenderer;
 
 impl DiscordRenderer {
-    pub fn render_ongoing_game(loc: &Localization, payload: &OngoingGamePayload) -> RenderedGamePure {
+    pub fn render_ongoing_game(
+        loc: &Localization,
+        payload: &OngoingGamePayload,
+    ) -> RenderedGamePure {
         let title = EmbedBuilder::new()
             .description(&loc.title)
             .image(
@@ -124,26 +138,20 @@ impl DiscordRenderer {
             .field(EmbedFieldBuilder::new(&loc.sensor_title, sensor).inline())
             .field(EmbedFieldBuilder::new(&loc.core_title, core).inline())
             .field(EmbedFieldBuilder::new(&loc.gun_title, gun).inline())
-            .field(
-                EmbedFieldBuilder::new(&loc.right_wing_title, right_wing)
-                    .inline(),
-            )
-            .field(
-                EmbedFieldBuilder::new(&loc.left_wing_title, left_wing)
-                    .inline(),
-            )
+            .field(EmbedFieldBuilder::new(&loc.right_wing_title, right_wing).inline())
+            .field(EmbedFieldBuilder::new(&loc.left_wing_title, left_wing).inline())
             .build();
 
-        let controls = vec! [
+        let controls = vec![
             Component::ActionRow(ActionRow {
-                components: vec! [
+                components: vec![
                     make_controls_button("🇸", payload.bygone_parts[BygonePart::Sensor].health()),
                     make_controls_button("🇨", payload.bygone_parts[BygonePart::Core].health()),
                     make_controls_button("🇬", payload.bygone_parts[BygonePart::Gun].health()),
                 ],
             }),
             Component::ActionRow(ActionRow {
-                components: vec! [
+                components: vec![
                     make_controls_button("🇷", payload.bygone_parts[BygonePart::RightWing].health()),
                     Component::Button(Button {
                         custom_id: Some("status".to_owned()),
@@ -159,12 +167,15 @@ impl DiscordRenderer {
         ];
 
         let upper_message = RenderedMessagePure {
-            embeds: vec! [ title, enemies ],
+            embeds: vec![title, enemies],
             components: controls,
         };
 
         let turn_progress = EmbedBuilder::new()
-            .field(EmbedFieldBuilder::new(&loc.turn_progress_title, render_turn_timer(0, PROGRESS_BAR_SIZE)))
+            .field(EmbedFieldBuilder::new(
+                &loc.turn_progress_title,
+                render_turn_timer(0, PROGRESS_BAR_SIZE),
+            ))
             .build();
 
         let battle_log_contents = " • ".to_string() + &payload.battle_log_lines.join("\n • ");
@@ -174,18 +185,22 @@ impl DiscordRenderer {
 
         let mut players_embed_builder = EmbedBuilder::new();
         for (name, vitality) in payload.players.iter() {
-            players_embed_builder = players_embed_builder.field(
-                EmbedFieldBuilder::new(&name.0, vitality.health().render_text(loc)),
-            );
+            players_embed_builder = players_embed_builder.field(EmbedFieldBuilder::new(
+                &name.0,
+                vitality.health().render_text(loc),
+            ));
         }
         let players = players_embed_builder.build();
 
         let lower_message = RenderedMessagePure {
-            embeds: vec! [ turn_progress, log, players ],
+            embeds: vec![turn_progress, log, players],
             components: Vec::new(),
         };
 
-        RenderedGamePure { upper_message, lower_message }
+        RenderedGamePure {
+            upper_message,
+            lower_message,
+        }
     }
 
     pub fn render_finished_game(loc: &Localization, status: FinishedGameStatus) -> RenderedGame {
@@ -197,19 +212,29 @@ impl DiscordRenderer {
 
         RenderedGame {
             upper_message: RenderedMessagePure {
-                embeds: vec! [ embed ],
+                embeds: vec![embed],
                 components: Vec::new(),
-            }.into(),
+            }
+            .into(),
             lower_message: RenderedMessage::Delete,
         }
     }
 
-    pub fn render_turn_progress(id: Id<GuildMarker>, previous: &RenderedGame, loc: &Localization, progress: f32) -> Result<RenderedGame, GameRenderError> {
+    pub fn render_turn_progress(
+        id: Id<GuildMarker>,
+        previous: &RenderedGame,
+        loc: &Localization,
+        progress: f32,
+    ) -> Result<RenderedGame, GameRenderError> {
         if let RenderedMessage::Message(mut lower_message) = previous.lower_message.clone() {
-            let filled_count = ((progress * PROGRESS_BAR_SCALE).round().max(0.0) as usize).min(PROGRESS_BAR_SIZE);
+            let filled_count =
+                ((progress * PROGRESS_BAR_SCALE).round().max(0.0) as usize).min(PROGRESS_BAR_SIZE);
             let progress_bar = render_turn_timer(filled_count, PROGRESS_BAR_SIZE);
             let progress_bar_embed = EmbedBuilder::new()
-                .field(EmbedFieldBuilder::new(&loc.turn_progress_title, progress_bar))
+                .field(EmbedFieldBuilder::new(
+                    &loc.turn_progress_title,
+                    progress_bar,
+                ))
                 .build();
 
             if lower_message.embeds.is_empty() {
@@ -223,18 +248,23 @@ impl DiscordRenderer {
                 lower_message: lower_message.into(),
             })
         } else {
-            Err(GameRenderError::new(id, "can't write progress bar for deleted or skipped lower message".to_owned()))
+            Err(GameRenderError::new(
+                id,
+                "can't write progress bar for deleted or skipped lower message".to_owned(),
+            ))
         }
     }
 
     pub fn render_oneshot(oneshot_type: OneshotType, loc: &Localization) -> RenderedMessagePure {
         let oneshot_message = match oneshot_type {
-            OneshotType::Cooldown(duration_left) => loc.battle_cooldown.insert_duration(&duration_left),
+            OneshotType::Cooldown(duration_left) => {
+                loc.battle_cooldown.insert_duration(&duration_left)
+            }
             OneshotType::OtherGameInProgress => loc.other_battle_ongoing.clone(),
         };
         let oneshot_embed = EmbedBuilder::new().description(&oneshot_message.0).build();
         RenderedMessagePure {
-            embeds: vec! [ oneshot_embed ],
+            embeds: vec![oneshot_embed],
             components: Vec::new(),
         }
     }

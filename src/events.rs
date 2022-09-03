@@ -4,13 +4,14 @@ use bevy::prelude::*;
 use derive_new::new;
 use enum_map::EnumMap;
 use twilight_model::id::{
-    marker::{GuildMarker, UserMarker, InteractionMarker},
+    marker::{GuildMarker, InteractionMarker, UserMarker},
     Id,
 };
 
 use crate::{
-    components::{BygonePart, PlayerName, Bygone03Stage, Attack, Vitality},
-    localization::Localization, bundles::BygoneParts, game_helpers::{FinishedGameStatus, Difficulty},
+    components::{Attack, Bygone03Stage, BygonePart, PlayerName, Vitality},
+    game_helpers::{Difficulty, FinishedGameStatus},
+    localization::Localization,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
