@@ -10,6 +10,32 @@ pub enum Language {
     En,
 }
 
+impl Language {
+    pub fn from_str(difficulty: &str) -> Option<Self> {
+        match difficulty {
+            "en" => Some(Language::En),
+            "ru" => Some(Language::Ru),
+            _ => None,
+        }
+    }
+}
+
+impl From<Language> for &str {
+    fn from(language: Language) -> Self {
+        match language {
+            Language::Ru => "ru",
+            Language::En => "en",
+        }
+    }
+}
+
+impl From<Language> for String {
+    fn from(language: Language) -> Self {
+        let slice: &str = language.into();
+        slice.to_owned()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LocalizedLine(pub String);
 

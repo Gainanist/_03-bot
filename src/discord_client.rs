@@ -23,15 +23,15 @@ use twilight_model::{
 };
 
 use crate::{
-    command_parser::is_game_starting,
+    command_parser::{is_game_starting, BATTLE_COMMAND, DIFFICULTY_COMMAND_OPTION, LANGUAGE_COMMAND_OPTION},
     controller::{
         create_game_message, create_message, process_interaction, start_game, update_game_message,
         update_game_message_pure,
     },
     discord_renderer::{DiscordRenderer, RenderedGame, RenderedMessage},
     events::{GameRenderEvent, GameRenderPayload, InputEvent},
-    game_helpers::InteractionIds,
-    localization::Localizations,
+    game_helpers::{InteractionIds, Difficulty},
+    localization::{Localizations, Language},
 };
 
 fn merge_with_cached(rendered_game: RenderedGame, cached: &mut RenderedGame) {
@@ -101,9 +101,9 @@ impl DiscordClient {
             println!("Registering commands for app id {}", app_id);
             http.interaction(app_id)
                 .create_global_command()
-                .chat_input("battle", "Fight the _03")?
+                .chat_input(BATTLE_COMMAND, "Fight the _03")?
                 .description_localizations(&HashMap::from([(
-                    "ru".to_owned(),
+                    Language::Ru.into(),
                     "Сразиться с _03".to_owned(),
                 )]))?
                 .command_options(&[
@@ -113,46 +113,46 @@ impl DiscordClient {
                             CommandOptionChoice::String {
                                 name: "Easy - Just like in the game".to_owned(),
                                 name_localizations: Some(HashMap::from([(
-                                    "ru".to_owned(),
+                                    Language::Ru.into(),
                                     "Легко - Совсем как в игре".to_owned(),
                                 )])),
-                                value: "easy".to_owned(),
+                                value: Difficulty::Easy.into(),
                             },
                             CommandOptionChoice::String {
                                 name: "Medium - Take a buddy with you".to_owned(),
                                 name_localizations: Some(HashMap::from([(
-                                    "ru".to_owned(),
+                                    Language::Ru.into(),
                                     "Средне - Позови друга".to_owned(),
                                 )])),
-                                value: "medium".to_owned(),
+                                value: Difficulty::Medium.into(),
                             },
                             CommandOptionChoice::String {
                                 name: "Hard - You shall not pass!".to_owned(),
                                 name_localizations: Some(HashMap::from([(
-                                    "ru".to_owned(),
+                                    Language::Ru.into(),
                                     "Сложно - Ты не пройдёшь!".to_owned(),
                                 )])),
-                                value: "hard".to_owned(),
+                                value: Difficulty::Hard.into(),
                             },
                             CommandOptionChoice::String {
                                 name: "Real bullets - Forgive me, Mister Pikes...".to_owned(),
                                 name_localizations: Some(HashMap::from([(
-                                    "ru".to_owned(),
+                                    Language::Ru.into(),
                                     "Боевые патроны - Простите меня, мистер Пайкс...".to_owned(),
                                 )])),
-                                value: "real_bullets".to_owned(),
+                                value: Difficulty::RealBullets.into(),
                             },
                         ],
                         description: "Battle difficulty".to_owned(),
                         description_localizations: Some(HashMap::from([(
-                            "ru".to_owned(),
+                            Language::Ru.into(),
                             "Сложность битвы".to_owned(),
                         )])),
                         max_length: None,
                         min_length: None,
-                        name: "difficulty".to_owned(),
+                        name: DIFFICULTY_COMMAND_OPTION.to_owned(),
                         name_localizations: Some(HashMap::from([(
-                            "ru".to_owned(),
+                            Language::Ru.into(),
                             "сложность".to_owned(),
                         )])),
                         required: false,
@@ -163,30 +163,30 @@ impl DiscordClient {
                             CommandOptionChoice::String {
                                 name: "English".to_owned(),
                                 name_localizations: Some(HashMap::from([(
-                                    "ru".to_owned(),
+                                    Language::Ru.into(),
                                     "английский".to_owned(),
                                 )])),
-                                value: "en".to_owned(),
+                                value: Language::En.into(),
                             },
                             CommandOptionChoice::String {
                                 name: "Russian".to_owned(),
                                 name_localizations: Some(HashMap::from([(
-                                    "ru".to_owned(),
+                                    Language::Ru.into(),
                                     "русский".to_owned(),
                                 )])),
-                                value: "ru".to_owned(),
+                                value: Language::Ru.into(),
                             },
                         ],
                         description: "Interface language".to_owned(),
                         description_localizations: Some(HashMap::from([(
-                            "ru".to_owned(),
+                            Language::Ru.into(),
                             "Язык интерфейса".to_owned(),
                         )])),
                         max_length: None,
                         min_length: None,
-                        name: "language".to_owned(),
+                        name: LANGUAGE_COMMAND_OPTION.to_owned(),
                         name_localizations: Some(HashMap::from([(
-                            "ru".to_owned(),
+                            Language::Ru.into(),
                             "язык".to_owned(),
                         )])),
                         required: false,

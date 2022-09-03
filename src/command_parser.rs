@@ -5,21 +5,25 @@ use twilight_model::application::interaction::application_command::{
 
 use crate::{components::BygonePart, game_helpers::Difficulty, localization::Language};
 
+pub const BATTLE_COMMAND: &str = "battle";
+pub const LANGUAGE_COMMAND_OPTION: &str = "language";
+pub const DIFFICULTY_COMMAND_OPTION: &str = "difficulty";
+
 pub fn is_game_starting(command: &CommandData) -> Option<(Language, Difficulty)> {
-    if command.name != "battle" {
+    if command.name != BATTLE_COMMAND {
         return None;
     }
     let mut language = Language::En;
     let mut difficulty = Difficulty::Medium;
     for option in &command.options {
-        if option.name == "language" {
+        if option.name == LANGUAGE_COMMAND_OPTION {
             if let CommandOptionValue::String(lang_name) = &option.value {
-                if lang_name == "ru" {
-                    language = Language::Ru;
+                if let Some(lang) = Language::from_str(lang_name) {
+                    language = lang;
                 }
             }
         }
-        if option.name == "difficulty" {
+        if option.name == DIFFICULTY_COMMAND_OPTION {
             if let CommandOptionValue::String(level) = &option.value {
                 if let Some(level) = Difficulty::from_str(level) {
                     difficulty = level;

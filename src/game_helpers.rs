@@ -30,6 +30,24 @@ impl Difficulty {
     }
 }
 
+impl From<Difficulty> for &str {
+    fn from(difficulty: Difficulty) -> Self {
+        match difficulty {
+            Difficulty::Easy => "easy",
+            Difficulty::Medium => "medium",
+            Difficulty::Hard => "hard",
+            Difficulty::RealBullets => "real_bullets",
+        }
+    }
+}
+
+impl From<Difficulty> for String {
+    fn from(difficulty: Difficulty) -> Self {
+        let slice: &str = difficulty.into();
+        slice.to_owned()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct EventDelay(pub Duration);
 
