@@ -277,7 +277,7 @@ impl DiscordClient {
                         {
                             if let Some((language, difficulty)) = is_game_starting(&command) {
                                 println!(
-                                    "{} - discord_client - Starting game in guild {}",
+                                    "{} - discord_client - Attempting to start game in guild {}",
                                     format_time(),
                                     guild_id
                                 );
