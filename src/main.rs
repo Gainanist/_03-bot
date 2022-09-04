@@ -11,6 +11,7 @@ mod game_helpers;
 mod io;
 mod localization;
 mod systems;
+mod logging;
 
 use std::{collections::HashMap, env, error::Error, sync::Mutex, time::Duration};
 
@@ -26,7 +27,7 @@ use game_helpers::{EventDelay, Game};
 
 use crossbeam_channel::unbounded;
 
-use crate::cli::Cli;
+use crate::{cli::Cli, logging::format_time};
 use crate::systems::*;
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
@@ -53,7 +54,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     tokio::spawn(async move {
         loop {
-            write_json_from_channel(&games_receiver, &games_path);
+            if let Err(err) = write_json_from_channel(&games_receiver, &games_path) {
+                println!("{} - main - FAILED to save games: {}", format_time(), err);
+            }
         }
     });
 

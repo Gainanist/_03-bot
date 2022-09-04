@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     ops::DerefMut,
     sync::Mutex,
-    time::{Duration, Instant},
+    time::{Duration, Instant}, fmt::Debug,
 };
 
 use bevy::prelude::*;
@@ -22,10 +22,12 @@ use crate::{
     events::*,
     game_helpers::{EventDelay, FinishedGameStatus, Game, GameStatus, GameTimer},
     localization::RenderText,
+    logging::format_time,
 };
 
-const GAME_COOLDOWN_SECONDS: u64 = 10 * 60;
-const MAX_GAME_DURATION_SECS: u64 = 15 * 60 - 10;
+const INTERACTION_TOKEN_TTL_SECS: u64 = 15 * 60;
+const MAX_GAME_DURATION_SECS: u64 = INTERACTION_TOKEN_TTL_SECS - 10;
+const GAME_COOLDOWN_SECONDS: u64 = INTERACTION_TOKEN_TTL_SECS - 5;
 
 pub fn listen(
     input_receiver: Mutex<Receiver<InputEvent>>,
@@ -82,12 +84,14 @@ pub fn listen(
                     };
                     if let Some(oneshot_type) = oneshot_type {
                         if let Ok(game_render_sender_lock) = game_render_sender.lock() {
-                            game_render_sender_lock.send(GameRenderEvent::new(
+                            if let Err(err) = game_render_sender_lock.send(GameRenderEvent::new(
                                 ev.guild_id,
                                 ev.interaction,
                                 ev.localization.clone(),
                                 GameRenderPayload::OneshotMessage(oneshot_type),
-                            ));
+                            )) {
+                                println!("{} - systems - FAILED to send render oneshot event: {}", format_time(), err);
+                            }
                         }
                     } else {
                         let new_game_id = GameId::from_current_time(i as u128);
@@ -249,7 +253,8 @@ pub fn damage_bygone(
                 }
                 let dice_roll = rng.d100();
                 println!(
-                    "Attacking bygone part, dodge {}, acc {}, roll {}",
+                    "{} - systems - Attacking bygone part, dodge {}, acc {}, roll {}",
+                    format_time(),
                     body_parts.0[*part].dodge(),
                     attack.accuracy(),
                     dice_roll
@@ -478,12 +483,14 @@ pub fn render(
         for ProgressBarUpdateEvent { guild_id, progress } in ev_progress_bar_update.iter() {
             if let Some(game) = games.get(guild_id) {
                 if let Ok(ref mut sender_lock) = sender.lock() {
-                    sender_lock.send(GameRenderEvent {
+                    if let Err(err) = sender_lock.send(GameRenderEvent {
                         guild_id: *guild_id,
                         interaction_id: game.interaction_id,
                         loc: game.localization.clone(),
                         payload: GameRenderPayload::TurnProgress(*progress),
-                    });
+                    }) {
+                        println!("{} - systems - FAILED to send render progressbar event: {}", format_time(), err);
+                    }
                 }
             }
         }
@@ -534,7 +541,9 @@ pub fn render(
                 };
 
                 if let Ok(sender_lock) = sender.lock() {
-                    sender_lock.send(game_render_ev);
+                    if let Err(err) = sender_lock.send(game_render_ev) {
+                        println!("{} - systems - FAILED to send render game event: {}", format_time(), err);
+                    }
                 }
             }
         }
@@ -582,7 +591,9 @@ pub fn save_games(
 ) -> impl FnMut(Res<HashMap<Id<GuildMarker>, Game>>) {
     move |games| {
         if let Ok(ref mut sender_lock) = sender.lock() {
-            sender_lock.send(games.clone());
+            if let Err(err) = sender_lock.send(games.clone()) {
+                println!("{} - systems - FAILED to send save games event: {}", format_time(), err);
+            }
         }
     }
 }

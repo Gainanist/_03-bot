@@ -25,6 +25,7 @@ use crate::{
     components::PlayerName,
     events::{GameStartEvent, InputEvent, PlayerAttackEvent},
     localization::Localization,
+    logging::format_time,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -112,14 +113,16 @@ pub fn start_game(
             }
             .to_string(),
         );
-        sender.send(InputEvent::GameStart(GameStartEvent::new(
+        if let Err(err) = sender.send(InputEvent::GameStart(GameStartEvent::new(
             user.id,
             initial_player_name,
             difficulty,
             guild_id,
             interaction.id,
             localization,
-        )));
+        ))) {
+            println!("{} - controller - FAILED to send game start event: {}", format_time(), err);
+        }
     }
 }
 
@@ -145,7 +148,8 @@ pub async fn create_game_message(
     interaction: &InteractionIds,
 ) -> Result<Id<MessageMarker>, Box<dyn Error + Send + Sync>> {
     println!(
-        "Creating game message with interaction id {}",
+        "{} - controller - Creating game message with interaction id {}",
+        format_time(),
         interaction.id
     );
     create_message(http, rendered_game.upper_message, &interaction).await?;
@@ -169,7 +173,8 @@ pub async fn update_game_message(
     rendered_game: &RenderedGame,
 ) -> Result<Option<Id<MessageMarker>>, Box<dyn Error + Send + Sync>> {
     println!(
-        "Updating game message with interaction id {}",
+        "{} - controller - Updating game message with interaction id {}",
+        format_time(),
         interaction.id
     );
     let mut deleted = false;
@@ -223,7 +228,8 @@ pub async fn update_game_message_pure(
     rendered_game: &RenderedGamePure,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     println!(
-        "Updating pure game message with interaction id {}",
+        "{} - controller - Updating pure game message with interaction id {}",
+        format_time(),
         interaction.id
     );
     http.interaction(interaction.app_id)

@@ -31,6 +31,7 @@ use crate::{
     events::{GameRenderEvent, GameRenderPayload, InputEvent},
     game_helpers::{Difficulty, InteractionIds},
     localization::{Language, Localizations},
+    logging::format_time,
 };
 
 fn merge_with_cached(rendered_game: RenderedGame, cached: &mut RenderedGame) {
@@ -94,7 +95,7 @@ impl DiscordClient {
                 .model()
                 .await?
                 .id;
-            println!("Registering commands for app id {}", app_id);
+            println!("{} - discord_client - Registering commands for app id {}", format_time(), app_id);
             http.interaction(app_id)
                 .create_global_command()
                 .chat_input(BATTLE_COMMAND, "Fight the _03")?
@@ -190,7 +191,7 @@ impl DiscordClient {
                 ])?
                 .exec()
                 .await?;
-            println!("Commands register success");
+            println!("{} - discord_client - Commands register success", format_time());
             Ok(())
         }
 
@@ -215,13 +216,14 @@ impl DiscordClient {
             while let Some((shard_id, event)) = events.next().await {
                 match event {
                     Event::ShardConnected(_) => {
-                        println!("Connected on shard {}", shard_id);
+                        println!("{} - discord_client - Connected on shard {}", format_time(), shard_id);
                     }
                     Event::InteractionCreate(interaction)
                         if interaction.kind == InteractionType::MessageComponent =>
                     {
                         println!(
-                            "Received InteractionCreate event of type MessageComponent, id {}",
+                            "{} - discord_client - Received InteractionCreate event of type MessageComponent, id {}",
+                            format_time(),
                             interaction.id
                         );
                         let http = Arc::clone(&http);
@@ -240,14 +242,17 @@ impl DiscordClient {
                                 .exec(),
                         );
                         if let Some(ev) = process_interaction(interaction.0) {
-                            input_sender.send(ev);
+                            if let Err(err) = input_sender.send(ev) {
+                                println!("{} - discord_client - FAILED to send input event: {}", format_time(), err);
+                            }
                         }
                     }
                     Event::InteractionCreate(interaction)
                         if interaction.kind == InteractionType::ApplicationCommand =>
                     {
                         println!(
-                            "Received InteractionCreate event of type ApplicationCommand, id {}",
+                            "{} - discord_client - Received InteractionCreate event of type ApplicationCommand, id {}",
+                            format_time(),
                             interaction.id
                         );
                         if let (
@@ -256,18 +261,20 @@ impl DiscordClient {
                         ) = (interaction.guild_id, &interaction.data)
                         {
                             if let Some((language, difficulty)) = is_game_starting(&command) {
-                                println!("Starting game in guild {}", guild_id);
+                                println!("{} - discord_client - Starting game in guild {}", format_time(), guild_id);
                                 let localization = localizations.get(language).clone();
                                 start_game(&input_sender, localization, difficulty, &interaction);
-                                interaction_sender.send(InteractionIds {
+                                if let Err(err) = interaction_sender.send(InteractionIds {
                                     id: interaction.id,
                                     app_id: interaction.application_id,
                                     token: interaction.token.clone(),
-                                });
+                                }) {
+                                    println!("{} - discord_client - FAILED to send interaction ids: {}", format_time(), err);
+                                }
                             }
                         } else {
                             println!(
-                                "Failed to start game: empty guild_id or wrong interaction command"
+                                "{} - discord_client - Failed to start game: empty guild_id or wrong interaction command", format_time()
                             );
                         }
                     }
@@ -333,11 +340,11 @@ impl DiscordClient {
                                         .await
                                         {
                                             Ok(()) => {
-                                                println!("discord_client: Updated game message with interaction id {}", interaction_ids.id);
+                                                println!("{} - discord_client - Updated game message with interaction id {}", format_time(), interaction_ids.id);
                                                 merge_with_cached(rendered_game.into(), cached);
                                             }
                                             Err(err) => {
-                                                println!("discord_client: ERROR updating game message with interaction id {}: {}", interaction_ids.id, err);
+                                                println!("{} - discord_client - ERROR updating game message with interaction id {}: {}", format_time(), interaction_ids.id, err);
                                             }
                                         }
                                     }
@@ -350,7 +357,7 @@ impl DiscordClient {
                                         .await
                                         {
                                             Ok(followup_id) => {
-                                                println!("discord_client: Created game message with interaction id {}", interaction_ids.id);
+                                                println!("{} - discord_client - Created game message with interaction id {}", format_time(), interaction_ids.id);
                                                 messages.insert(
                                                     guild_id,
                                                     (
@@ -361,7 +368,7 @@ impl DiscordClient {
                                                 );
                                             }
                                             Err(err) => {
-                                                println!("discord_client: ERROR creating game message with interaction id {}: {}", interaction_ids.id, err);
+                                                println!("{} - discord_client - ERROR creating game message with interaction id {}: {}", format_time(), interaction_ids.id, err);
                                             }
                                         }
                                     }
@@ -385,15 +392,15 @@ impl DiscordClient {
                                         .await
                                         {
                                             Ok(_) => {
-                                                println!("discord_client: Cleanup rendered game cache with interaction id {}", interaction_ids.id);
+                                                println!("{} - discord_client - Cleanup rendered game cache with interaction id {}", format_time(), interaction_ids.id);
                                             }
                                             Err(err) => {
-                                                println!("discord_client: ERROR updating finished game with interaction id {}: {}", interaction_ids.id, err);
+                                                println!("{} - discord_client - ERROR updating finished game with interaction id {}: {}", format_time(), interaction_ids.id, err);
                                             }
                                         }
                                     }
                                     _ => {
-                                        println!("discord_client: ERROR updating finished game with interaction id {}: cache not found", interaction_ids.id);
+                                        println!("{} - discord_client - ERROR updating finished game with interaction id {}: cache not found", format_time(), interaction_ids.id);
                                     }
                                 }
                                 if remove {
@@ -418,22 +425,22 @@ impl DiscordClient {
                                                 .await
                                                 {
                                                     Ok(Some(_)) => {
-                                                        println!("discord_client: Updated progress bar with interaction id {}", interaction_ids.id);
+                                                        println!("{} - discord_client - Updated progress bar with interaction id {}", format_time(), interaction_ids.id);
                                                         merge_with_cached(rendered_game, cached);
                                                     }
                                                     Ok(None) => {}
                                                     Err(err) => {
-                                                        println!("discord_client: ERROR updating progress bar with interaction id {}: {}", interaction_ids.id, err);
+                                                        println!("{} - discord_client - ERROR updating progress bar with interaction id {}: {}", format_time(), interaction_ids.id, err);
                                                     }
                                                 }
                                             }
                                             Err(err) => {
-                                                println!("discord_client: ERROR updating progress bar with interaction id {}: {}", interaction_ids.id, err);
+                                                println!("{} - discord_client - ERROR updating progress bar with interaction id {}: {}", format_time(), interaction_ids.id, err);
                                             }
                                         }
                                     }
                                     _ => {
-                                        println!("discord_client: ERROR updating progress bar with interaction id {}: cache not found", interaction_ids.id);
+                                        println!("{} - discord_client - ERROR updating progress bar with interaction id {}: cache not found", format_time(), interaction_ids.id);
                                     }
                                 }
                             }
@@ -441,9 +448,9 @@ impl DiscordClient {
                                 let oneshot_message =
                                     DiscordRenderer::render_oneshot(oneshot_type, &ev.loc);
                                 match create_message(&http_write, oneshot_message, &interaction_ids).await {
-                                    Ok(()) => println!("discord_client: Created oneshot message with interaction id {}", interaction_ids.id),
+                                    Ok(()) => println!("{} - discord_client - Created oneshot message with interaction id {}", format_time(), interaction_ids.id),
                                     Err(err) =>
-                                        println!("discord_client: ERROR creating oneshot message with interaction id {}: {}", interaction_ids.id, err),
+                                        println!("{} - discord_client - ERROR creating oneshot message with interaction id {}: {}", format_time(), interaction_ids.id, err),
                                 }
                             }
                         }
