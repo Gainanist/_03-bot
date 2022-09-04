@@ -252,12 +252,20 @@ impl DiscordClient {
                                 )
                                 .exec(),
                         );
-                        if let Some(ev) = process_interaction(interaction.0) {
-                            if let Err(err) = input_sender.send(ev) {
+                        match process_interaction(interaction.0) {
+                            Some(ev) => {
+                                if let Err(err) = input_sender.send(ev) {
+                                    println!(
+                                        "{} - discord_client - FAILED to send input event: {}",
+                                        format_time(),
+                                        err
+                                    );
+                                }
+                            }
+                            None => {
                                 println!(
-                                    "{} - discord_client - FAILED to send input event: {}",
-                                    format_time(),
-                                    err
+                                    "{} - discord_client - FAILED to process MessageComponent interaction",
+                                    format_time()
                                 );
                             }
                         }

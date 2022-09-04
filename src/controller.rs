@@ -58,35 +58,87 @@ fn make_message_interaction_response(msg: RenderedMessagePure) -> InteractionRes
 }
 
 pub fn process_interaction(interaction: Interaction) -> Option<InputEvent> {
-    if let (
+    let emoji_name = match interaction.data {
         Some(InteractionData::MessageComponent(MessageComponentInteractionData {
-            custom_id: emoji_name,
+            custom_id,
             ..
-        })),
+        })) => custom_id,
+        Some(_) => {
+            println!(
+                "{} - controller - ERROR processing interaction with id {}: interaction data is not MessageComponent",
+                format_time(),
+                interaction.id
+            );
+            return None;
+        }
+        None => {
+            println!(
+                "{} - controller - ERROR processing interaction with id {}: empty interaction data",
+                format_time(),
+                interaction.id
+            );
+            return None;
+        }
+    };
+    let (user, user_nick) = match interaction.member {
         Some(PartialMember {
             user: Some(user),
             nick: user_nick,
             ..
-        }),
-        Some(guild_id),
-    ) = (interaction.data, interaction.member, interaction.guild_id)
-    {
-        if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(&emoji_name) {
-            let user_name = PlayerName(
-                match &user_nick {
-                    Some(nick) => nick,
-                    None => &user.name,
-                }
-                .to_string(),
+        }) => (user, user_nick),
+        Some(PartialMember {
+            user: None,
+            ..
+        }) => {
+            println!(
+                "{} - controller - ERROR processing interaction with id {}: empty user",
+                format_time(),
+                interaction.id
             );
-
-            return Some(InputEvent::PlayerAttack(PlayerAttackEvent::new(
-                user.id,
-                user_name,
-                guild_id,
-                *bygone_part,
-            )));
+            return None;
         }
+        None => {
+            println!(
+                "{} - controller - ERROR processing interaction with id {}: empty partial member",
+                format_time(),
+                interaction.id
+            );
+            return None;
+        }
+    };
+    let guild_id = match interaction.guild_id {
+        Some(guild_id) => guild_id,
+        None => {
+            println!(
+                "{} - controller - ERROR processing interaction with id {}: empty guild id",
+                format_time(),
+                interaction.id
+            );
+            return None;
+        }
+    };
+
+    if let Some(bygone_part) = BYGONE_PARTS_FROM_EMOJI_NAME.get(&emoji_name) {
+        let user_name = PlayerName(
+            match &user_nick {
+                Some(nick) => nick,
+                None => &user.name,
+            }
+            .to_string(),
+        );
+
+        return Some(InputEvent::PlayerAttack(PlayerAttackEvent::new(
+            user.id,
+            user_name,
+            guild_id,
+            *bygone_part,
+        )));
+    } else {
+        println!(
+            "{} - controller - ERROR processing interaction with id {}: unknown bygone part emoji",
+            format_time(),
+            interaction.id
+        );
     }
     return None;
 }
