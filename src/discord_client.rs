@@ -9,7 +9,10 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 
 use futures::stream::StreamExt;
 
-use twilight_gateway::{cluster::{Events, ShardScheme}, Cluster, Event, Intents};
+use twilight_gateway::{
+    cluster::{Events, ShardScheme},
+    Cluster, Event, Intents,
+};
 use twilight_http::Client as HttpClient;
 use twilight_model::{
     application::{
@@ -63,7 +66,10 @@ pub struct DiscordClient {
 
 impl DiscordClient {
     pub async fn new(token: String) -> Result<(Self, Events), Box<dyn Error + Sync + Send>> {
-        let (cluster, events) = Cluster::builder(token.to_owned(), Intents::empty()).shard_scheme(ShardScheme::try_from((0..=4, 10))?).build().await?;
+        let (cluster, events) = Cluster::builder(token.to_owned(), Intents::empty())
+            .shard_scheme(ShardScheme::try_from((0..=4, 10))?)
+            .build()
+            .await?;
         let cluster = Arc::new(cluster);
 
         let http_read = Arc::new(HttpClient::new(token.to_owned()));
