@@ -165,7 +165,7 @@ impl DiscordClient {
                                 name: "English".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.into(),
-                                    "английский".to_owned(),
+                                    "Английский".to_owned(),
                                 )])),
                                 value: Language::En.into(),
                             },
@@ -173,7 +173,7 @@ impl DiscordClient {
                                 name: "Russian".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.into(),
-                                    "русский".to_owned(),
+                                    "Русский".to_owned(),
                                 )])),
                                 value: Language::Ru.into(),
                             },
