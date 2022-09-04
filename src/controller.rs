@@ -4,6 +4,7 @@ use std::fmt;
 use crossbeam_channel::Sender;
 use twilight_http::Client;
 
+use twilight_model::channel::message::MessageFlags;
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
@@ -50,7 +51,7 @@ fn make_message_interaction_response(msg: RenderedMessagePure) -> InteractionRes
             content: None,
             custom_id: None,
             embeds: Some(msg.embeds),
-            flags: None,
+            flags: Some(msg.flags),
             title: None,
             tts: None,
         }),
@@ -191,7 +192,7 @@ pub async fn create_message(
         .create_response(
             interaction.id,
             &interaction.token,
-            &make_message_interaction_response(oneshot.into()),
+            &make_message_interaction_response(oneshot),
         )
         .exec()
         .await?;
@@ -214,6 +215,7 @@ pub async fn create_game_message(
         .create_followup(&interaction.token)
         .embeds(&rendered_game.lower_message.embeds)?
         .components(&rendered_game.lower_message.components)?
+        .flags(rendered_game.lower_message.flags)
         .exec()
         .await?
         .model()

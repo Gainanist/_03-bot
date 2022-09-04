@@ -4,7 +4,7 @@ use derive_new::new;
 use rand::seq::SliceRandom;
 use twilight_model::{
     application::component::{button::ButtonStyle, ActionRow, Button, Component},
-    channel::{embed::Embed, ReactionType},
+    channel::{embed::Embed, ReactionType, message::MessageFlags},
     id::{marker::GuildMarker, Id},
 };
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
@@ -68,6 +68,7 @@ impl Error for GameRenderError {}
 pub struct RenderedMessagePure {
     pub embeds: Vec<Embed>,
     pub components: Vec<Component>,
+    pub flags: MessageFlags,
 }
 
 #[derive(Clone, Debug)]
@@ -170,6 +171,7 @@ impl DiscordRenderer {
         let upper_message = RenderedMessagePure {
             embeds: vec![title, enemies],
             components: controls,
+            flags: MessageFlags::empty(),
         };
 
         let turn_progress = EmbedBuilder::new()
@@ -196,6 +198,7 @@ impl DiscordRenderer {
         let lower_message = RenderedMessagePure {
             embeds: vec![turn_progress, log, players],
             components: Vec::new(),
+            flags: MessageFlags::empty(),
         };
 
         RenderedGamePure {
@@ -216,6 +219,7 @@ impl DiscordRenderer {
             upper_message: RenderedMessagePure {
                 embeds: vec![embed],
                 components: Vec::new(),
+                flags: MessageFlags::empty(),
             }
             .into(),
             lower_message: RenderedMessage::Delete,
@@ -268,6 +272,7 @@ impl DiscordRenderer {
         RenderedMessagePure {
             embeds: vec![oneshot_embed],
             components: Vec::new(),
+            flags: MessageFlags::EPHEMERAL,
         }
     }
 }
