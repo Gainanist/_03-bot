@@ -19,16 +19,13 @@ use bevy_turborand::RngPlugin;
 use clap::Parser;
 
 use discord_client::DiscordClient;
-use io::{read_json, write_json_from_channel};
 
 use events::EventsPlugin;
 
 use game_helpers::{EventDelay, Game};
 
-use crossbeam_channel::unbounded;
-
 use crate::systems::*;
-use crate::{cli::Cli, logging::format_time};
+use crate::{cli::Cli};
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 
@@ -43,22 +40,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let output_sender = client.listen_game(interaction_receiver).await;
 
     let cli = Cli::parse();
-    let games = read_json::<HashMap<Id<GuildMarker>, Game>>(&cli.games_path);
+    let games = HashMap::<Id<GuildMarker>, Game>::new(); // read_json::<HashMap<Id<GuildMarker>, Game>>(&cli.games_path);
     // let scoreboard = read_json::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>(&cli.scoreboard_path);
-    let (games_sender, games_receiver) = unbounded::<HashMap<Id<GuildMarker>, Game>>();
-    let games_path = cli.games_path.clone();
+    // let (games_sender, games_receiver) = unbounded::<HashMap<Id<GuildMarker>, Game>>();
+    // let games_path = cli.games_path.clone();
 
     if cli.update_commands {
         client.register_commands()
     }
 
-    tokio::spawn(async move {
-        loop {
-            if let Err(err) = write_json_from_channel(&games_receiver, &games_path) {
-                println!("{} - main - FAILED to save games: {}", format_time(), err);
-            }
-        }
-    });
+    // tokio::spawn(async move {
+    //     loop {
+    //         if let Err(err) = write_json_from_channel(&games_receiver, &games_path) {
+    //             println!("{} - main - FAILED to save games: {}", format_time(), err);
+    //         }
+    //     }
+    // });
 
     // let (scoreboard_sender, scoreboard_receiver) = unbounded::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>();
     // let scoreboard_path = cli.scoreboard_path.clone();
@@ -100,7 +97,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .add_system(render(Mutex::new(output_sender)).label(render_label))
         .add_system(ready_players)
         .add_system(cleanup)
-        .add_system(save_games(Mutex::new(games_sender)))
+        // .add_system(save_games(Mutex::new(games_sender)))
         // .add_system(save_scoreboard(Mutex::new(scoreboard_sender)))
         .run();
 

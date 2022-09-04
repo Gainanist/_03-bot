@@ -597,21 +597,21 @@ pub fn cleanup(
     }
 }
 
-pub fn save_games(
-    sender: Mutex<Sender<HashMap<Id<GuildMarker>, Game>>>,
-) -> impl FnMut(Res<HashMap<Id<GuildMarker>, Game>>) {
-    move |games| {
-        if let Ok(ref mut sender_lock) = sender.lock() {
-            if let Err(err) = sender_lock.send(games.clone()) {
-                println!(
-                    "{} - systems - FAILED to send save games event: {}",
-                    format_time(),
-                    err
-                );
-            }
-        }
-    }
-}
+// pub fn save_games(
+//     sender: Mutex<Sender<HashMap<Id<GuildMarker>, Game>>>,
+// ) -> impl FnMut(Res<HashMap<Id<GuildMarker>, Game>>) {
+//     move |games| {
+//         if let Ok(ref mut sender_lock) = sender.lock() {
+//             if let Err(err) = sender_lock.send(games.clone()) {
+//                 println!(
+//                     "{} - systems - FAILED to send save games event: {}",
+//                     format_time(),
+//                     err
+//                 );
+//             }
+//         }
+//     }
+// }
 
 // pub fn save_scoreboard(sender: Mutex<Sender<HashMap::<GuildId, HashMap<Id<UserMarker>, usize>>>>) -> impl FnMut(
 //     Res<HashMap::<GuildId, HashMap<Id<UserMarker>, usize>>>,

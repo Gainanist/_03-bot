@@ -192,7 +192,7 @@ impl Localizations {
                 "*Сердечко. Сердечко. Румяная кошачья мордочка. Сердечко*".into(),
             ],
             battle_cooldown: "*_03 ремонтирует себя, будет готов через {DURATION} сек*".into(),
-            other_battle_ongoing: "_03 занят: кто-то уже пытается выйти из Ройса!".into()
+            other_battle_ongoing: "*_03 занят: кто-то уже пытается выйти из Ройса!*".into()
         };
 
         let localization_en = Localization {
@@ -260,7 +260,7 @@ impl Localizations {
                 "*Heart. Heart. Blushing cat face. Heart.*".into(),
             ],
             battle_cooldown: "*_03 is repairing itself, it will be ready in {DURATION}s*".into(),
-            other_battle_ongoing: "_03 is busy: somebody is already trying to leave Royce!".into()
+            other_battle_ongoing: "*_03 is busy: somebody is already trying to leave Royce!*".into()
         };
 
         let mut localizations = HashMap::with_capacity(2);
