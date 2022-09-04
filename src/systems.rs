@@ -9,7 +9,6 @@ use bevy::prelude::*;
 use bevy_turborand::GlobalRng;
 use crossbeam_channel::{Receiver, Sender};
 use enum_map::EnumMap;
-use rand::Rng;
 use twilight_model::id::{marker::GuildMarker, Id};
 
 use crate::{
