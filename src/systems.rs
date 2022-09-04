@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     ops::DerefMut,
     sync::Mutex,
-    time::{Duration, Instant}, fmt::Debug,
+    time::{Duration, Instant},
 };
 
 use bevy::prelude::*;
@@ -90,7 +90,11 @@ pub fn listen(
                                 ev.localization.clone(),
                                 GameRenderPayload::OneshotMessage(oneshot_type),
                             )) {
-                                println!("{} - systems - FAILED to send render oneshot event: {}", format_time(), err);
+                                println!(
+                                    "{} - systems - FAILED to send render oneshot event: {}",
+                                    format_time(),
+                                    err
+                                );
                             }
                         }
                     } else {
@@ -489,7 +493,11 @@ pub fn render(
                         loc: game.localization.clone(),
                         payload: GameRenderPayload::TurnProgress(*progress),
                     }) {
-                        println!("{} - systems - FAILED to send render progressbar event: {}", format_time(), err);
+                        println!(
+                            "{} - systems - FAILED to send render progressbar event: {}",
+                            format_time(),
+                            err
+                        );
                     }
                 }
             }
@@ -542,7 +550,11 @@ pub fn render(
 
                 if let Ok(sender_lock) = sender.lock() {
                     if let Err(err) = sender_lock.send(game_render_ev) {
-                        println!("{} - systems - FAILED to send render game event: {}", format_time(), err);
+                        println!(
+                            "{} - systems - FAILED to send render game event: {}",
+                            format_time(),
+                            err
+                        );
                     }
                 }
             }
@@ -592,7 +604,11 @@ pub fn save_games(
     move |games| {
         if let Ok(ref mut sender_lock) = sender.lock() {
             if let Err(err) = sender_lock.send(games.clone()) {
-                println!("{} - systems - FAILED to send save games event: {}", format_time(), err);
+                println!(
+                    "{} - systems - FAILED to send save games event: {}",
+                    format_time(),
+                    err
+                );
             }
         }
     }

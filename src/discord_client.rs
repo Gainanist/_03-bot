@@ -95,7 +95,11 @@ impl DiscordClient {
                 .model()
                 .await?
                 .id;
-            println!("{} - discord_client - Registering commands for app id {}", format_time(), app_id);
+            println!(
+                "{} - discord_client - Registering commands for app id {}",
+                format_time(),
+                app_id
+            );
             http.interaction(app_id)
                 .create_global_command()
                 .chat_input(BATTLE_COMMAND, "Fight the _03")?
@@ -191,7 +195,10 @@ impl DiscordClient {
                 ])?
                 .exec()
                 .await?;
-            println!("{} - discord_client - Commands register success", format_time());
+            println!(
+                "{} - discord_client - Commands register success",
+                format_time()
+            );
             Ok(())
         }
 
@@ -216,7 +223,11 @@ impl DiscordClient {
             while let Some((shard_id, event)) = events.next().await {
                 match event {
                     Event::ShardConnected(_) => {
-                        println!("{} - discord_client - Connected on shard {}", format_time(), shard_id);
+                        println!(
+                            "{} - discord_client - Connected on shard {}",
+                            format_time(),
+                            shard_id
+                        );
                     }
                     Event::InteractionCreate(interaction)
                         if interaction.kind == InteractionType::MessageComponent =>
@@ -243,7 +254,11 @@ impl DiscordClient {
                         );
                         if let Some(ev) = process_interaction(interaction.0) {
                             if let Err(err) = input_sender.send(ev) {
-                                println!("{} - discord_client - FAILED to send input event: {}", format_time(), err);
+                                println!(
+                                    "{} - discord_client - FAILED to send input event: {}",
+                                    format_time(),
+                                    err
+                                );
                             }
                         }
                     }
@@ -261,7 +276,11 @@ impl DiscordClient {
                         ) = (interaction.guild_id, &interaction.data)
                         {
                             if let Some((language, difficulty)) = is_game_starting(&command) {
-                                println!("{} - discord_client - Starting game in guild {}", format_time(), guild_id);
+                                println!(
+                                    "{} - discord_client - Starting game in guild {}",
+                                    format_time(),
+                                    guild_id
+                                );
                                 let localization = localizations.get(language).clone();
                                 start_game(&input_sender, localization, difficulty, &interaction);
                                 if let Err(err) = interaction_sender.send(InteractionIds {
@@ -269,7 +288,11 @@ impl DiscordClient {
                                     app_id: interaction.application_id,
                                     token: interaction.token.clone(),
                                 }) {
-                                    println!("{} - discord_client - FAILED to send interaction ids: {}", format_time(), err);
+                                    println!(
+                                        "{} - discord_client - FAILED to send interaction ids: {}",
+                                        format_time(),
+                                        err
+                                    );
                                 }
                             }
                         } else {

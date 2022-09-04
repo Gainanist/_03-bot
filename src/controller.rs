@@ -121,7 +121,11 @@ pub fn start_game(
             interaction.id,
             localization,
         ))) {
-            println!("{} - controller - FAILED to send game start event: {}", format_time(), err);
+            println!(
+                "{} - controller - FAILED to send game start event: {}",
+                format_time(),
+                err
+            );
         }
     }
 }

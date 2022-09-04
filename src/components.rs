@@ -6,7 +6,10 @@ use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use twilight_model::id::{marker::UserMarker, Id};
 
-use crate::{localization::{Localization, RenderText}, logging::format_time};
+use crate::{
+    localization::{Localization, RenderText},
+    logging::format_time,
+};
 
 #[derive(Clone, Copy, Component, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Health {
@@ -85,7 +88,9 @@ impl Vitality {
             println!(
                 "{} - components - Taking damage: {}, accuracy: {}, dodge: {}",
                 format_time(),
-                damage, accuracy, self.dodge
+                damage,
+                accuracy,
+                self.dodge
             );
             return true;
         }
