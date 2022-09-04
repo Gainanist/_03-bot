@@ -24,8 +24,8 @@ use events::EventsPlugin;
 
 use game_helpers::{EventDelay, Game};
 
+use crate::cli::Cli;
 use crate::systems::*;
-use crate::{cli::Cli};
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 
@@ -40,7 +40,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let output_sender = client.listen_game(interaction_receiver).await;
 
     let cli = Cli::parse();
-    let games = HashMap::<Id<GuildMarker>, Game>::new(); // read_json::<HashMap<Id<GuildMarker>, Game>>(&cli.games_path);
+    let games = HashMap::<Id<GuildMarker>, Game>::new();
+    // read_json::<HashMap<Id<GuildMarker>, Game>>(&cli.games_path);
     // let scoreboard = read_json::<HashMap::<Id<GuildMarker>, HashMap<Id<UserMarker>, usize>>>(&cli.scoreboard_path);
     // let (games_sender, games_receiver) = unbounded::<HashMap<Id<GuildMarker>, Game>>();
     // let games_path = cli.games_path.clone();
