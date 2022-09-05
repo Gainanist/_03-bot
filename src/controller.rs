@@ -4,7 +4,6 @@ use std::fmt;
 use crossbeam_channel::Sender;
 use twilight_http::Client;
 
-use twilight_model::channel::message::MessageFlags;
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };

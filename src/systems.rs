@@ -123,10 +123,26 @@ pub fn listen(
                         match players.get(&UserIdComponent(ev.player)) {
                             Some(maybe_active) => {
                                 if let Some(_active) = maybe_active {
+                                    println!(
+                                        "{} - systems - Processing attack event for player id: {}",
+                                        format_time(),
+                                        ev.player,
+                                    );
                                     ev_player_attack.send((game.id, ev));
+                                } else {
+                                    println!(
+                                        "{} - systems - ERROR processing attack event for player id {}: player is not active",
+                                        format_time(),
+                                        ev.player,
+                                    );
                                 }
                             }
                             None => {
+                                println!(
+                                    "{} - systems - Processing join event for player id: {}",
+                                    format_time(),
+                                    ev.player,
+                                );
                                 ev_player_join.send(PlayerJoinEvent::new(
                                     ev.player.clone(),
                                     ev.player_name.clone(),
@@ -136,6 +152,13 @@ pub fn listen(
                                 ev_delayed.send(DelayedEvent::PlayerAttack((game.id, ev)));
                             }
                         }
+                    } else {
+                        println!(
+                            "{} - systems - ERROR processing attack event for player id {}: no game for guild id {}",
+                            format_time(),
+                            ev.player,
+                            ev.guild_id,
+                        );
                     }
                 }
             }
