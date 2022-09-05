@@ -86,10 +86,7 @@ pub fn process_interaction(interaction: Interaction) -> Option<InputEvent> {
             nick: user_nick,
             ..
         }) => (user, user_nick),
-        Some(PartialMember {
-            user: None,
-            ..
-        }) => {
+        Some(PartialMember { user: None, .. }) => {
             println!(
                 "{} - controller - ERROR processing interaction with id {}: empty user",
                 format_time(),

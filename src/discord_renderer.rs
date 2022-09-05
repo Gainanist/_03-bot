@@ -4,7 +4,7 @@ use derive_new::new;
 use rand::seq::SliceRandom;
 use twilight_model::{
     application::component::{button::ButtonStyle, ActionRow, Button, Component},
-    channel::{embed::Embed, ReactionType, message::MessageFlags},
+    channel::{embed::Embed, message::MessageFlags, ReactionType},
     id::{marker::GuildMarker, Id},
 };
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
