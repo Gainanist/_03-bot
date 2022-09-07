@@ -1,7 +1,7 @@
 use std::error::Error;
-use std::fmt;
 
 use crossbeam_channel::Sender;
+use thiserror::Error;
 use twilight_http::Client;
 
 use twilight_model::http::interaction::{
@@ -28,16 +28,9 @@ use crate::{
     logging::format_time,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Error)]
+#[error("need two messages to create a game")]
 pub struct GameCreateError;
-
-impl fmt::Display for GameCreateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "need two messages to create a game")
-    }
-}
-
-impl Error for GameCreateError {}
 
 fn make_message_interaction_response(msg: RenderedMessagePure) -> InteractionResponse {
     InteractionResponse {

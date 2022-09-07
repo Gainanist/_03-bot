@@ -3,6 +3,7 @@ use std::time::{Duration, Instant, SystemTime};
 use derive_new::new;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString, IntoStaticStr};
 use twilight_model::id::{
     marker::{ApplicationMarker, InteractionMarker},
     Id,
@@ -10,42 +11,12 @@ use twilight_model::id::{
 
 use crate::{components::GameId, localization::Localization};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq, EnumString, IntoStaticStr, PartialOrd, Ord, Hash)]
 pub enum Difficulty {
     Easy,
     Medium,
     Hard,
     RealBullets,
-}
-
-impl Difficulty {
-    pub fn from_str(difficulty: &str) -> Option<Self> {
-        match difficulty {
-            "easy" => Some(Difficulty::Easy),
-            "medium" => Some(Difficulty::Medium),
-            "hard" => Some(Difficulty::Hard),
-            "real_bullets" => Some(Difficulty::RealBullets),
-            _ => None,
-        }
-    }
-}
-
-impl From<Difficulty> for &str {
-    fn from(difficulty: Difficulty) -> Self {
-        match difficulty {
-            Difficulty::Easy => "easy",
-            Difficulty::Medium => "medium",
-            Difficulty::Hard => "hard",
-            Difficulty::RealBullets => "real_bullets",
-        }
-    }
-}
-
-impl From<Difficulty> for String {
-    fn from(difficulty: Difficulty) -> Self {
-        let slice: &str = difficulty.into();
-        slice.to_owned()
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]

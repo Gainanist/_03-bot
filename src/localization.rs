@@ -1,39 +1,16 @@
 use std::{collections::HashMap, fmt::Display, time::Duration};
 
 use serde::{Deserialize, Serialize};
+use strum::{EnumString, Display, IntoStaticStr};
 
 use crate::components::PlayerName;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Display, EnumString, PartialEq, Eq, Hash, IntoStaticStr)]
 pub enum Language {
+    #[strum(serialize = "ru")]
     Ru,
+    #[strum(serialize = "en")]
     En,
-}
-
-impl Language {
-    pub fn from_str(difficulty: &str) -> Option<Self> {
-        match difficulty {
-            "en" => Some(Language::En),
-            "ru" => Some(Language::Ru),
-            _ => None,
-        }
-    }
-}
-
-impl From<Language> for &str {
-    fn from(language: Language) -> Self {
-        match language {
-            Language::Ru => "ru",
-            Language::En => "en",
-        }
-    }
-}
-
-impl From<Language> for String {
-    fn from(language: Language) -> Self {
-        let slice: &str = language.into();
-        slice.to_owned()
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

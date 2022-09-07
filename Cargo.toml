@@ -19,6 +19,8 @@ phf = { version = "0.10.1", features = ["macros"] }
 rand = "0.8.4"
 serde = { version = "1.0.132", features = ["derive"] }
 serde_json = "1.0.73"
+strum = { version = "0.24.1", features = ["derive"] }
+thiserror = "1.0.34"
 tokio = { version = "1.13.0", features = ["full"] }
 twilight-util = { version = "0.12.1", features = ["builder"] }
 twilight-gateway = "0.12.1"

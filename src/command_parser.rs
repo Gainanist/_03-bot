@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use phf::phf_ordered_map;
 use twilight_model::application::interaction::application_command::{
     CommandData, CommandOptionValue,
@@ -18,14 +20,14 @@ pub fn is_game_starting(command: &CommandData) -> Option<(Language, Difficulty)>
     for option in &command.options {
         if option.name == LANGUAGE_COMMAND_OPTION {
             if let CommandOptionValue::String(lang_name) = &option.value {
-                if let Some(lang) = Language::from_str(lang_name) {
+                if let Ok(lang) = Language::from_str(lang_name) {
                     language = lang;
                 }
             }
         }
         if option.name == DIFFICULTY_COMMAND_OPTION {
             if let CommandOptionValue::String(level) = &option.value {
-                if let Some(level) = Difficulty::from_str(level) {
+                if let Ok(level) = Difficulty::from_str(level) {
                     difficulty = level;
                 }
             }

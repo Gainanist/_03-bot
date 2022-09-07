@@ -2,6 +2,7 @@ use std::time::SystemTime;
 
 use bevy::prelude::Component;
 
+use derive_new::new;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use twilight_model::id::{marker::UserMarker, Id};
@@ -112,17 +113,13 @@ impl RenderText for Vitality {
     }
 }
 
-#[derive(Clone, Copy, Component, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Component, Debug, Default, Eq, Hash, new, Ord, PartialEq, PartialOrd)]
 pub struct Attack {
     damage: usize,
     accuracy: isize,
 }
 
 impl Attack {
-    pub fn new(damage: usize, accuracy: isize) -> Self {
-        Attack { damage, accuracy }
-    }
-
     pub fn accuracy(&self) -> isize {
         self.accuracy
     }

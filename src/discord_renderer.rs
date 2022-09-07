@@ -1,7 +1,6 @@
-use std::{error::Error, fmt::Display};
-
 use derive_new::new;
 use rand::seq::SliceRandom;
+use thiserror::Error;
 use twilight_model::{
     application::component::{button::ButtonStyle, ActionRow, Button, Component},
     channel::{embed::Embed, message::MessageFlags, ReactionType},
@@ -50,19 +49,12 @@ fn render_turn_timer(cur: usize, max: usize) -> String {
         ":white_large_square:".to_owned().repeat(max - cur),
     )
 }
-#[derive(Clone, Debug, new)]
+#[derive(Clone, Debug, Error, new)]
+#[error("{msg}, guild id: {id}")]
 pub struct GameRenderError {
     id: Id<GuildMarker>,
     msg: String,
 }
-
-impl Display for GameRenderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}, guild id: {}", self.msg, self.id)
-    }
-}
-
-impl Error for GameRenderError {}
 
 #[derive(Clone, Debug)]
 pub struct RenderedMessagePure {
