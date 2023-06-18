@@ -288,9 +288,11 @@ impl DiscordClient {
                         {
                             if let Some((language, difficulty)) = is_game_starting(&command) {
                                 println!(
-                                    "{} - discord_client - Attempting to start game in guild {}",
+                                    "{} - discord_client - Attempting to start game in guild {} with lang {} and difficulty {}",
                                     format_time(),
-                                    guild_id
+                                    guild_id,
+                                    language.to_string(),
+                                    difficulty.to_string(),
                                 );
                                 let localization = localizations.get(language).clone();
                                 start_game(&input_sender, localization, difficulty, &interaction);
