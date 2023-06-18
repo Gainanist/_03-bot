@@ -2,8 +2,10 @@ use derive_new::new;
 use rand::seq::SliceRandom;
 use thiserror::Error;
 use twilight_model::{
-    application::component::{button::ButtonStyle, ActionRow, Button, Component},
-    channel::{embed::Embed, message::MessageFlags, ReactionType},
+    channel::message::{
+        component::{ButtonStyle, ActionRow, Button, Component},
+        embed::Embed, ReactionType, MessageFlags
+    },
     id::{marker::GuildMarker, Id},
 };
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
@@ -151,7 +153,7 @@ impl DiscordRenderer {
                         custom_id: Some("status".to_owned()),
                         disabled: true,
                         emoji: None, //Some(ReactionType::Custom { name: (*rng.sample(&AUXILIARY_EMOJIS).unwrap_or(&"")).to_owned(), id: None, animated: false }),
-                        label: Some(" ".to_owned()),
+                        label: Some(".".to_owned()),
                         style: ButtonStyle::Secondary,
                         url: None,
                     }),

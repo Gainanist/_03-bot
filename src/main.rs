@@ -34,9 +34,8 @@ use twilight_model::id::{marker::GuildMarker, Id};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
-    let (client, events) = DiscordClient::new(token).await?;
-    client.startup();
-    let (input_receiver, interaction_receiver) = client.listen_discord(events).await?;
+    let (client, mut shard) = DiscordClient::new(token);
+    let (input_receiver, interaction_receiver) = client.listen_discord(shard).await?;
     let output_sender = client.listen_game(interaction_receiver).await;
 
     let cli = Cli::parse();

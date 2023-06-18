@@ -2,22 +2,22 @@ use std::{
     collections::HashMap,
     error::Error,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::Duration, future::IntoFuture,
 };
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
 
-use futures::stream::StreamExt;
-
-use twilight_gateway::{cluster::Events, Cluster, Event, Intents};
+use twilight_gateway::{Intents, Shard, ShardId, Event};
 use twilight_http::Client as HttpClient;
 use twilight_model::{
     application::{
-        command::{ChoiceCommandOptionData, CommandOption, CommandOptionChoice},
+        command::{CommandOption, CommandOptionChoice, CommandOptionType, CommandOptionChoiceValue},
         interaction::{InteractionData, InteractionType},
     },
     http::interaction::{InteractionResponse, InteractionResponseType},
 };
+
+use tracing;
 
 use crate::{
     command_parser::{
@@ -56,41 +56,30 @@ fn merge_with_cached(rendered_game: RenderedGame, cached: &mut RenderedGame) {
 }
 
 pub struct DiscordClient {
-    cluster: Arc<Cluster>,
     http_write: Arc<HttpClient>,
     http_read: Arc<HttpClient>,
 }
 
 impl DiscordClient {
-    pub async fn new(token: String) -> Result<(Self, Events), Box<dyn Error + Sync + Send>> {
-        let (cluster, events) = Cluster::new(token.to_owned(), Intents::empty()).await?;
-        let cluster = Arc::new(cluster);
+    pub fn new(token: String) -> (Self, Shard) {
+        let shard = Shard::new(ShardId::ONE, token.to_owned(), Intents::empty());
 
         let http_read = Arc::new(HttpClient::new(token.to_owned()));
         let http_write = Arc::new(HttpClient::new(token));
 
-        Ok((
+        (
             Self {
-                cluster,
                 http_write,
                 http_read,
             },
-            events,
-        ))
-    }
-
-    pub fn startup(&self) {
-        let cluster_spawn = Arc::clone(&self.cluster);
-        tokio::spawn(async move {
-            cluster_spawn.up().await;
-        });
+            shard
+        )
     }
 
     pub fn register_commands(&self) {
         async fn inner(http: Arc<HttpClient>) -> Result<(), Box<dyn Error + Sync + Send>> {
             let app_id = http
                 .current_user_application()
-                .exec()
                 .await?
                 .model()
                 .await?
@@ -108,92 +97,101 @@ impl DiscordClient {
                     "Сразиться с _03".to_owned(),
                 )]))?
                 .command_options(&[
-                    CommandOption::String(ChoiceCommandOptionData {
-                        autocomplete: false,
-                        choices: vec![
-                            CommandOptionChoice::String {
+                    CommandOption {
+                        autocomplete: Some(false),
+                        channel_types: None,
+                        choices: Some(vec![
+                            CommandOptionChoice {
                                 name: "Easy - Just like in the game".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.to_string(),
                                     "Легко - Совсем как в игре".to_owned(),
                                 )])),
-                                value: Difficulty::Easy.to_string(),
+                                value: CommandOptionChoiceValue::String(Difficulty::Easy.to_string()),
                             },
-                            CommandOptionChoice::String {
+                            CommandOptionChoice {
                                 name: "Medium - Take a buddy with you".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.to_string(),
                                     "Средне - Позови друга".to_owned(),
                                 )])),
-                                value: Difficulty::Medium.to_string(),
+                                value: CommandOptionChoiceValue::String(Difficulty::Medium.to_string()),
                             },
-                            CommandOptionChoice::String {
+                            CommandOptionChoice {
                                 name: "Hard - You shall not pass!".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.to_string(),
                                     "Сложно - Ты не пройдёшь!".to_owned(),
                                 )])),
-                                value: Difficulty::Hard.to_string(),
+                                value: CommandOptionChoiceValue::String(Difficulty::Hard.to_string()),
                             },
-                            CommandOptionChoice::String {
+                            CommandOptionChoice {
                                 name: "Real bullets - Forgive me, Mister Pikes...".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.to_string(),
                                     "Боевые патроны - Простите меня, мистер Пайкс...".to_owned(),
                                 )])),
-                                value: Difficulty::RealBullets.to_string(),
+                                value: CommandOptionChoiceValue::String(Difficulty::RealBullets.to_string()),
                             },
-                        ],
+                        ]),
                         description: "Battle difficulty".to_owned(),
                         description_localizations: Some(HashMap::from([(
                             Language::Ru.to_string(),
                             "Сложность битвы".to_owned(),
                         )])),
+                        kind: CommandOptionType::String,
                         max_length: None,
                         min_length: None,
+                        min_value: None,
+                        max_value: None,
                         name: DIFFICULTY_COMMAND_OPTION.to_owned(),
                         name_localizations: Some(HashMap::from([(
                             Language::Ru.to_string(),
                             "сложность".to_owned(),
                         )])),
-                        required: false,
-                    }),
-                    CommandOption::String(ChoiceCommandOptionData {
-                        autocomplete: false,
-                        choices: vec![
-                            CommandOptionChoice::String {
+                        options: None,
+                        required: Some(false),
+                    },
+                    CommandOption {
+                        autocomplete: Some(false),
+                        channel_types: None,
+                        choices: Some(vec![
+                            CommandOptionChoice {
                                 name: "English".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.to_string(),
                                     "Английский".to_owned(),
                                 )])),
-                                value: Language::En.to_string(),
+                                value: CommandOptionChoiceValue::String(Language::En.to_string()),
                             },
-                            CommandOptionChoice::String {
+                            CommandOptionChoice {
                                 name: "Russian".to_owned(),
                                 name_localizations: Some(HashMap::from([(
                                     Language::Ru.to_string(),
                                     "Русский".to_owned(),
                                 )])),
-                                value: Language::Ru.to_string(),
+                                value: CommandOptionChoiceValue::String(Language::Ru.to_string()),
                             },
-                        ],
+                        ]),
                         description: "Interface language".to_owned(),
                         description_localizations: Some(HashMap::from([(
                             Language::Ru.to_string(),
                             "Язык интерфейса".to_owned(),
                         )])),
+                        kind: CommandOptionType::String,
                         max_length: None,
                         min_length: None,
+                        min_value: None,
+                        max_value: None,
                         name: LANGUAGE_COMMAND_OPTION.to_owned(),
                         name_localizations: Some(HashMap::from([(
                             Language::Ru.to_string(),
                             "язык".to_owned(),
                         )])),
-                        required: false,
-                    }),
+                        options: None,
+                        required: Some(false),
+                    },
                 ])?
-                .exec()
                 .await?;
             println!(
                 "{} - discord_client - Commands register success",
@@ -210,7 +208,7 @@ impl DiscordClient {
 
     pub async fn listen_discord(
         &self,
-        mut events: Events,
+        mut shard: Shard
     ) -> Result<(Receiver<InputEvent>, Receiver<InteractionIds>), Box<dyn Error + Send + Sync>>
     {
         let http = Arc::clone(&self.http_read);
@@ -220,15 +218,20 @@ impl DiscordClient {
         tokio::spawn(async move {
             let localizations = Localizations::new();
             // Process each event as they come in.
-            while let Some((shard_id, event)) = events.next().await {
-                match event {
-                    Event::ShardConnected(_) => {
-                        println!(
-                            "{} - discord_client - Connected on shard {}",
-                            format_time(),
-                            shard_id
-                        );
+            loop {
+                let event = match shard.next_event().await {
+                    Ok(event) => event,
+                    Err(source) => {
+                        tracing::warn!(?source, "error receiving event");
+        
+                        if source.is_fatal() {
+                            break;
+                        }
+
+                        continue;
                     }
+                };
+                match event {
                     Event::InteractionCreate(interaction)
                         if interaction.kind == InteractionType::MessageComponent =>
                     {
@@ -250,7 +253,7 @@ impl DiscordClient {
                                     &interaction_clone.token,
                                     &response,
                                 )
-                                .exec(),
+                                .into_future()
                         );
                         match process_interaction(interaction.0) {
                             Some(ev) => {

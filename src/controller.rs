@@ -183,7 +183,6 @@ pub async fn create_message(
             &interaction.token,
             &make_message_interaction_response(oneshot),
         )
-        .exec()
         .await?;
     Ok(())
 }
@@ -205,7 +204,6 @@ pub async fn create_game_message(
         .embeds(&rendered_game.lower_message.embeds)?
         .components(&rendered_game.lower_message.components)?
         .flags(rendered_game.lower_message.flags)
-        .exec()
         .await?
         .model()
         .await?
@@ -231,13 +229,11 @@ pub async fn update_game_message(
                 .update_response(&interaction.token)
                 .embeds(Some(&message.embeds))?
                 .components(Some(&message.components))? // Components are cleared with an empty slice, None does nothing for them
-                .exec()
                 .await?;
         }
         RenderedMessage::Delete => {
             http.interaction(interaction.app_id)
                 .delete_response(&interaction.token)
-                .exec()
                 .await?;
         }
         RenderedMessage::Skip => {}
@@ -248,13 +244,11 @@ pub async fn update_game_message(
                 .update_followup(&interaction.token, followup_id)
                 .embeds(Some(&message.embeds))?
                 .components(Some(&message.components))? // Components are cleared with an empty slice, None does nothing for them
-                .exec()
                 .await?;
         }
         RenderedMessage::Delete => {
             http.interaction(interaction.app_id)
                 .delete_followup(&interaction.token, followup_id)
-                .exec()
                 .await?;
             deleted = true;
         }
@@ -283,13 +277,11 @@ pub async fn update_game_message_pure(
         .update_response(&interaction.token)
         .embeds(Some(&rendered_game.upper_message.embeds))?
         .components(Some(&rendered_game.upper_message.components))? // Components are cleared with an empty slice, None does nothing for them
-        .exec()
         .await?;
     http.interaction(interaction.app_id)
         .update_followup(&interaction.token, followup_id)
         .embeds(Some(&rendered_game.lower_message.embeds))?
         .components(Some(&rendered_game.lower_message.components))? // Components are cleared with an empty slice, None does nothing for them
-        .exec()
         .await?;
     Ok(())
 }
