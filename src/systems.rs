@@ -40,6 +40,8 @@ pub fn listen(
     EventWriter<PlayerJoinEvent>,
     EventWriter<BygoneSpawnEvent>,
     EventWriter<DeallocateGameResourcesEvent>,
+    // BUG: Should add GameId here
+    // Otherwise collisions will occur when the same player joins several battles
     Query<(&UserIdComponent, Option<&Active>), (With<Player>,)>,
 ) {
     move |mut games,
