@@ -91,7 +91,7 @@ impl DiscordClient {
             );
             http.interaction(app_id)
                 .create_global_command()
-                .chat_input(BATTLE_COMMAND, "Fight the _03")?
+                .chat_input(BATTLE_COMMAND, "Fight _03")?
                 .description_localizations(&HashMap::from([(
                     Language::Ru.to_string(),
                     "Сразиться с _03".to_owned(),
